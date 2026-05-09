@@ -56,6 +56,12 @@ async function handleAnswer(
     return
   }
 
+  const actorTrust = await trustForActor(input.gateway, pr, input.event.actor, config, input.report)
+  if (actorTrust.trusted) {
+    await hideCommentBestEffort(input.gateway, input.event.commentNodeId, input.report)
+    return
+  }
+
   const state = await loadChallengeState(input.gateway, input.inputs, pr)
   if (state.kind === 'none') {
     await startNewChallenge(input.gateway, input.inputs, config, pr, input.report)

@@ -32816,6 +32816,10 @@ async function handleAnswer(input, pr, config$1, answer) {
 		await hideCommentBestEffort(input.gateway, input.event.commentNodeId, input.report);
 		return;
 	}
+	if ((await trustForActor(input.gateway, pr, input.event.actor, config$1, input.report)).trusted) {
+		await hideCommentBestEffort(input.gateway, input.event.commentNodeId, input.report);
+		return;
+	}
 	const state = await loadChallengeState(input.gateway, input.inputs, pr);
 	if (state.kind === "none") {
 		await startNewChallenge(input.gateway, input.inputs, config$1, pr, input.report);

@@ -134,6 +134,38 @@ describe('OpenCHA flows', () => {
     expect(passed.payload.passedBy).toBe('maintainer')
     expect(gateway.comments.some((comment) => comment.body === 'OpenCHA verification manually approved by @maintainer.')).toBe(true)
   })
+
+  it('does not let a trusted maintainer pass with answer command', async () => {
+    const gateway = new FakeGateway()
+    gateway.pr = { ...gateway.pr, author: 'maintainer' }
+    const report = new ActionRunReport()
+
+    await handleIssueCommentEvent({
+      event: commentEvent('/opencha reset', 'maintainer'),
+      gateway,
+      inputs,
+      report
+    })
+
+    const state = await loadChallengeState(gateway, inputs, gateway.pr)
+    expect(state.kind).toBe('active')
+    if (state.kind !== 'active') throw new Error('expected active state')
+
+    const answer = createChallenge({
+      seed: state.payload.seed,
+      answerSalt: state.payload.answerSalt
+    }).display.answer
+
+    await handleIssueCommentEvent({
+      event: commentEvent(`/opencha answer ${answer}`, 'maintainer'),
+      gateway,
+      inputs,
+      report
+    })
+
+    const afterAnswer = await loadChallengeState(gateway, inputs, gateway.pr)
+    expect(afterAnswer.kind).toBe('active')
+  })
 })
 
 function prEvent(action: string) {

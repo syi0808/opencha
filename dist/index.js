@@ -33400,13 +33400,14 @@ var OctokitGitHubGateway = class {
 	}
 	async createOrUpdateCheck(owner, repo, headSha, input) {
 		try {
-			const checkRun = (await this.octokit.rest.checks.listForRef({
+			const checkRuns = (await this.octokit.rest.checks.listForRef({
 				owner,
 				repo,
 				ref: headSha,
 				check_name: input.name,
 				per_page: 100
-			})).data.check_runs.find((run) => run.name === input.name);
+			})).data.check_runs.filter((run) => run.name === input.name).sort((a, b) => checkRunTimestamp(b) - checkRunTimestamp(a));
+			const checkRun = input.status === "completed" ? checkRuns.find((run) => run.status !== "completed") ?? checkRuns[0] : checkRuns.find((run) => run.status !== "completed");
 			const output = {
 				title: input.title,
 				summary: input.summary
@@ -33565,6 +33566,10 @@ function toIssueComment(comment) {
 function normalizePermission(permission) {
 	if (permission === "admin" || permission === "maintain" || permission === "write" || permission === "triage" || permission === "read") return permission;
 	return "none";
+}
+function checkRunTimestamp(run) {
+	const timestamp$3 = run.started_at ?? run.completed_at;
+	return timestamp$3 ? Date.parse(timestamp$3) : 0;
 }
 function normalizeError(error$1, fallback, hard = true) {
 	if (statusOf(error$1) === 404) return new NotFoundError(fallback);

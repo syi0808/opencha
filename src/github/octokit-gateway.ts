@@ -156,7 +156,13 @@ export class OctokitGitHubGateway implements GitHubGateway {
         check_name: input.name,
         per_page: 100
       })
-      const checkRun = existing.data.check_runs.find((run) => run.name === input.name)
+      const checkRuns = existing.data.check_runs
+        .filter((run) => run.name === input.name)
+        .sort((a, b) => checkRunTimestamp(b) - checkRunTimestamp(a))
+      const checkRun =
+        input.status === 'completed'
+          ? checkRuns.find((run) => run.status !== 'completed') ?? checkRuns[0]
+          : checkRuns.find((run) => run.status !== 'completed')
       const output = { title: input.title, summary: input.summary }
 
       if (checkRun) {
@@ -334,6 +340,11 @@ function normalizePermission(permission: string): RepositoryPermission {
     return permission
   }
   return 'none'
+}
+
+function checkRunTimestamp(run: { started_at: string | null; completed_at: string | null }): number {
+  const timestamp = run.started_at ?? run.completed_at
+  return timestamp ? Date.parse(timestamp) : 0
 }
 
 function normalizeError(error: unknown, fallback: string, hard = true): GitHubGatewayError {

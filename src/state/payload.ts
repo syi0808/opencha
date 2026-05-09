@@ -16,7 +16,7 @@ export const challengePayloadSchema = z.object({
   challengeParams: z.object({
     length: z.literal(5),
     decoyCount: z.literal(4),
-    animationFrames: z.literal(8),
+    animationFrames: z.number().int().min(8).max(32),
     charset: z.string().min(1),
     noiseLevel: z.literal('medium'),
     targetIndex: z.number().int().min(2).max(5)

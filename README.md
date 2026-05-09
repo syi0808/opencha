@@ -77,6 +77,8 @@ policy:
 
 ## Challenge Flow
 
+The MVP challenge is a rasterized GIF. It renders each code as ASCII-art shaped text and slides from one code to the next without per-frame index markers.
+
 Untrusted PR authors reply to the challenge with:
 
 ```text

@@ -1,6 +1,6 @@
 import { BITMAP_FONT } from '../../src/challenge/bitmap-font'
 import { createChallenge } from '../../src/challenge/generate'
-import { FRAME_HEIGHT, FRAME_WIDTH, renderChallengeFrames } from '../../src/challenge/render'
+import { CODE_HOLD_FRAMES, FRAME_HEIGHT, FRAME_WIDTH, renderChallengeFrames } from '../../src/challenge/render'
 import { ANIMATION_FRAMES, CHALLENGE_CHARSET, DECOY_COUNT } from '../../src/challenge/types'
 
 describe('challenge renderer', () => {
@@ -14,14 +14,15 @@ describe('challenge renderer', () => {
     const challenge = createChallenge({ seed: 'render-seed', answerSalt: 'salt' }).display
     const frames = renderChallengeFrames(challenge)
 
-    expect(frames).toHaveLength((DECOY_COUNT + 1) * ANIMATION_FRAMES)
+    expect(ANIMATION_FRAMES).toBeGreaterThan(8)
+    expect(frames).toHaveLength((DECOY_COUNT + 1) * CODE_HOLD_FRAMES + DECOY_COUNT * ANIMATION_FRAMES)
 
     for (const frame of frames) {
       expect(frame.width).toBe(FRAME_WIDTH)
       expect(frame.height).toBe(FRAME_HEIGHT)
       expect(frame.rgba).toHaveLength(FRAME_WIDTH * FRAME_HEIGHT * 4)
-      expect(frame.delayMs).toBeGreaterThanOrEqual(250)
-      expect(frame.delayMs).toBeLessThanOrEqual(450)
+      expect(frame.delayMs).toBeGreaterThanOrEqual(60)
+      expect(frame.delayMs).toBeLessThanOrEqual(140)
     }
   })
 

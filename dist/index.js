@@ -20022,7 +20022,7 @@ const CHALLENGE_VERSION = 1;
 const CHALLENGE_CHARSET = "ABCDEFGHJKLMNPQRTUVWXY346789";
 const CHALLENGE_LENGTH = 5;
 const DECOY_COUNT = 4;
-const ANIMATION_FRAMES = 8;
+const ANIMATION_FRAMES = 16;
 const TARGET_INDEX_MIN = 2;
 const TARGET_INDEX_MAX = 5;
 const NOISE_LEVEL = "medium";
@@ -24318,7 +24318,7 @@ const challengePayloadSchema = object({
 	challengeParams: object({
 		length: literal(5),
 		decoyCount: literal(4),
-		animationFrames: literal(8),
+		animationFrames: number().int().min(8).max(32),
 		charset: string$5().min(1),
 		noiseLevel: literal("medium"),
 		targetIndex: number().int().min(2).max(5)
@@ -32438,7 +32438,8 @@ const GLYPH_HEIGHT = 7;
 //#region src/challenge/render.ts
 const FRAME_WIDTH = 360;
 const FRAME_HEIGHT = 120;
-const FRAME_DELAY_MS = 320;
+const FRAME_DELAY_MS = 90;
+const CODE_HOLD_FRAMES = 5;
 const BACKGROUND = [
 	240,
 	239,
@@ -32463,40 +32464,199 @@ const NOISE = [
 	160,
 	255
 ];
-const ACCENT = [
-	170,
-	64,
-	54,
+const DUST = [
+	211,
+	205,
+	196,
 	255
 ];
+const TINY_ASCII_FONT = {
+	"#": [
+		"111",
+		"111",
+		"111",
+		"111",
+		"111"
+	],
+	"@": [
+		"111",
+		"101",
+		"101",
+		"100",
+		"111"
+	],
+	"%": [
+		"101",
+		"001",
+		"010",
+		"100",
+		"101"
+	],
+	"&": [
+		"010",
+		"101",
+		"010",
+		"101",
+		"011"
+	],
+	"*": [
+		"101",
+		"010",
+		"111",
+		"010",
+		"101"
+	],
+	"+": [
+		"000",
+		"010",
+		"111",
+		"010",
+		"000"
+	],
+	"=": [
+		"000",
+		"111",
+		"000",
+		"111",
+		"000"
+	],
+	"/": [
+		"001",
+		"001",
+		"010",
+		"100",
+		"100"
+	],
+	"\\": [
+		"100",
+		"100",
+		"010",
+		"001",
+		"001"
+	],
+	"|": [
+		"010",
+		"010",
+		"010",
+		"010",
+		"010"
+	],
+	"_": [
+		"000",
+		"000",
+		"000",
+		"000",
+		"111"
+	]
+};
+const INK_SYMBOLS = [
+	"#",
+	"@",
+	"%",
+	"&",
+	"*",
+	"+"
+];
+const DUST_SYMBOLS = [
+	"+",
+	"=",
+	"/",
+	"\\",
+	"|",
+	"_"
+];
+const TINY_SCALE = 2;
+const TINY_GLYPH_WIDTH = 3;
+const TINY_GLYPH_HEIGHT = 5;
+const CELL_STRIDE_X = 7;
+const CELL_STRIDE_Y = 9;
+const LETTER_GAP = 8;
+const CHALLENGE_CODE_LENGTH = 5;
+const CODE_RENDER_WIDTH = CHALLENGE_CODE_LENGTH * GLYPH_WIDTH * CELL_STRIDE_X + (CHALLENGE_CODE_LENGTH - 1) * LETTER_GAP;
+const CODE_RENDER_HEIGHT = GLYPH_HEIGHT * CELL_STRIDE_Y;
+var SlideDirection = /* @__PURE__ */ function(SlideDirection$1) {
+	SlideDirection$1["Left"] = "left";
+	SlideDirection$1["Right"] = "right";
+	SlideDirection$1["Up"] = "up";
+	SlideDirection$1["Down"] = "down";
+	return SlideDirection$1;
+}(SlideDirection || {});
 function renderChallengeFrames(challenge) {
 	const frames = [];
 	for (let codeIndex = 0; codeIndex < challenge.codes.length; codeIndex++) {
 		const code = challenge.codes[codeIndex];
-		for (let frameIndex = 0; frameIndex < challenge.params.animationFrames; frameIndex++) frames.push(renderFrame(challenge, code, codeIndex, frameIndex));
+		for (let holdIndex = 0; holdIndex < CODE_HOLD_FRAMES; holdIndex++) frames.push(renderHoldFrame(challenge, code, codeIndex, holdIndex));
+		if (codeIndex + 1 < challenge.codes.length) {
+			const nextCode = challenge.codes[codeIndex + 1];
+			for (let frameIndex = 0; frameIndex < challenge.params.animationFrames; frameIndex++) frames.push(renderTransitionFrame(challenge, code, nextCode, codeIndex, frameIndex));
+		}
 	}
 	return frames;
 }
-function renderFrame(challenge, code, codeIndex, frameIndex) {
+function renderHoldFrame(challenge, code, codeIndex, holdIndex) {
 	const rgba = new Uint8Array(FRAME_WIDTH * FRAME_HEIGHT * 4);
-	fill(rgba, BACKGROUND);
-	const random$1 = new SeededRandom(`${challenge.seed}:frame:${codeIndex}:${frameIndex}:${challenge.targetIndex}`);
-	const progress = frameIndex / Math.max(1, challenge.params.animationFrames - 1);
-	const slide = Math.round((progress - .5) * 28);
-	const textWidth = code.length * GLYPH_WIDTH * 8 + (code.length - 1) * 6;
-	const baseX = Math.round((FRAME_WIDTH - textWidth) / 2) + slide;
-	const baseY = 33 + Math.round(Math.sin(progress * Math.PI * 2) * 2);
-	drawNoise(rgba, random$1);
-	drawLines(rgba, random$1);
-	drawText(rgba, `${codeIndex + 1}`, 24, 18, 4, MUTED, random$1);
-	drawText(rgba, code, baseX, baseY, 8, TEXT, random$1);
-	if (codeIndex + 1 === challenge.targetIndex) drawMarker(rgba, baseX - 13, baseY + 65);
+	const random$1 = new SeededRandom(`${challenge.seed}:hold:${codeIndex}:${holdIndex}`);
+	prepareCanvas(rgba, random$1);
+	const pulse = Math.sin(holdIndex / CODE_HOLD_FRAMES * Math.PI * 2);
+	const base = centerPosition();
+	drawAsciiArtCode(rgba, code, base.x + Math.round(pulse * 2) + random$1.nextInt(3) - 1, base.y + random$1.nextInt(3) - 1, TEXT, random$1);
+	drawObstruction(rgba, random$1);
 	return {
 		width: FRAME_WIDTH,
 		height: FRAME_HEIGHT,
 		rgba,
 		delayMs: FRAME_DELAY_MS
 	};
+}
+function renderTransitionFrame(challenge, sourceCode, targetCode, transitionIndex, frameIndex) {
+	const rgba = new Uint8Array(FRAME_WIDTH * FRAME_HEIGHT * 4);
+	const random$1 = new SeededRandom(`${challenge.seed}:transition:${transitionIndex}:${frameIndex}`);
+	prepareCanvas(rgba, random$1);
+	const progress = easeInOut(frameIndex / Math.max(1, challenge.params.animationFrames - 1));
+	const direction = slideDirection(challenge.seed, transitionIndex);
+	const base = centerPosition();
+	const distance = direction === SlideDirection.Left || direction === SlideDirection.Right ? CODE_RENDER_WIDTH + 64 : CODE_RENDER_HEIGHT + 36;
+	const offset = Math.round(progress * distance);
+	const source = {
+		x: base.x,
+		y: base.y
+	};
+	const target = {
+		x: base.x,
+		y: base.y
+	};
+	switch (direction) {
+		case SlideDirection.Left:
+			source.x -= offset;
+			target.x += distance - offset;
+			break;
+		case SlideDirection.Right:
+			source.x += offset;
+			target.x -= distance - offset;
+			break;
+		case SlideDirection.Up:
+			source.y -= offset;
+			target.y += distance - offset;
+			break;
+		case SlideDirection.Down:
+			source.y += offset;
+			target.y -= distance - offset;
+			break;
+	}
+	drawAsciiArtCode(rgba, sourceCode, source.x, source.y, MUTED, random$1);
+	drawAsciiArtCode(rgba, targetCode, target.x, target.y, TEXT, random$1);
+	drawObstruction(rgba, random$1);
+	return {
+		width: FRAME_WIDTH,
+		height: FRAME_HEIGHT,
+		rgba,
+		delayMs: FRAME_DELAY_MS
+	};
+}
+function prepareCanvas(rgba, random$1) {
+	fill(rgba, BACKGROUND);
+	drawDustField(rgba, random$1);
+	drawLines(rgba, random$1);
 }
 function fill(rgba, color) {
 	for (let i = 0; i < rgba.length; i += 4) {
@@ -32506,37 +32666,78 @@ function fill(rgba, color) {
 		rgba[i + 3] = color[3];
 	}
 }
-function drawNoise(rgba, random$1) {
-	for (let i = 0; i < 420; i++) setPixel(rgba, random$1.nextInt(FRAME_WIDTH), random$1.nextInt(FRAME_HEIGHT), random$1.nextInt(4) === 0 ? TEXT : NOISE);
-}
-function drawLines(rgba, random$1) {
-	for (let i = 0; i < 4; i++) drawLine(rgba, random$1.nextInt(FRAME_WIDTH), random$1.nextInt(FRAME_HEIGHT), random$1.nextInt(FRAME_WIDTH), random$1.nextInt(FRAME_HEIGHT), NOISE);
-}
-function drawText(rgba, text, x, y, scale, color, random$1) {
-	let cursorX = x;
-	for (const char of text) {
-		const glyph = BITMAP_FONT[char];
-		if (!glyph) {
-			cursorX += (GLYPH_WIDTH + 1) * scale;
-			continue;
-		}
-		const jitterX = random$1.nextInt(3) - 1;
-		const jitterY = random$1.nextInt(3) - 1;
-		drawGlyph(rgba, glyph, cursorX + jitterX, y + jitterY, scale, color);
-		cursorX += GLYPH_WIDTH * scale + Math.max(2, Math.floor(scale * .75));
+function drawDustField(rgba, random$1) {
+	for (let i = 0; i < 180; i++) setPixel(rgba, random$1.nextInt(FRAME_WIDTH), random$1.nextInt(FRAME_HEIGHT), random$1.nextInt(5) === 0 ? MUTED : NOISE);
+	for (let i = 0; i < 46; i++) {
+		const symbol = DUST_SYMBOLS[random$1.nextInt(DUST_SYMBOLS.length)];
+		drawTinySymbol(rgba, symbol, random$1.nextInt(FRAME_WIDTH), random$1.nextInt(FRAME_HEIGHT), random$1.nextInt(4) === 0 ? MUTED : DUST);
 	}
 }
-function drawGlyph(rgba, glyph, x, y, scale, color) {
+function drawLines(rgba, random$1) {
+	for (let i = 0; i < 7; i++) drawLine(rgba, random$1.nextInt(FRAME_WIDTH), random$1.nextInt(FRAME_HEIGHT), random$1.nextInt(FRAME_WIDTH), random$1.nextInt(FRAME_HEIGHT), NOISE);
+}
+function drawObstruction(rgba, random$1) {
+	for (let i = 0; i < 3; i++) {
+		const y = 16 + random$1.nextInt(FRAME_HEIGHT - 32);
+		const color = random$1.nextInt(3) === 0 ? MUTED : NOISE;
+		drawLine(rgba, 12 + random$1.nextInt(36), y, FRAME_WIDTH - 12 - random$1.nextInt(36), y + random$1.nextInt(9) - 4, color);
+	}
+	for (let i = 0; i < 14; i++) fillRect(rgba, random$1.nextInt(FRAME_WIDTH), random$1.nextInt(FRAME_HEIGHT), 1 + random$1.nextInt(2), 8 + random$1.nextInt(16), DUST);
+}
+function drawAsciiArtCode(rgba, code, x, y, color, random$1) {
+	let cursorX = x;
+	for (const char of code) {
+		const glyph = BITMAP_FONT[char];
+		if (!glyph) {
+			cursorX += GLYPH_WIDTH * CELL_STRIDE_X + LETTER_GAP;
+			continue;
+		}
+		drawAsciiGlyph(rgba, glyph, cursorX, y, color, random$1);
+		cursorX += GLYPH_WIDTH * CELL_STRIDE_X + LETTER_GAP;
+	}
+}
+function drawAsciiGlyph(rgba, glyph, x, y, color, random$1) {
 	for (let row = 0; row < GLYPH_HEIGHT; row++) {
 		const bits = glyph[row];
 		for (let col = 0; col < GLYPH_WIDTH; col++) {
-			if (bits[col] !== "1") continue;
-			fillRect(rgba, x + col * scale, y + row * scale, scale, scale, color);
+			const cellX = x + col * CELL_STRIDE_X + random$1.nextInt(3) - 1;
+			const cellY = y + row * CELL_STRIDE_Y + random$1.nextInt(3) - 1;
+			if (bits[col] === "1") {
+				const symbol = INK_SYMBOLS[random$1.nextInt(INK_SYMBOLS.length)];
+				drawTinySymbol(rgba, symbol, cellX, cellY, color);
+			} else if (random$1.nextInt(9) === 0) {
+				const symbol = DUST_SYMBOLS[random$1.nextInt(DUST_SYMBOLS.length)];
+				drawTinySymbol(rgba, symbol, cellX, cellY, DUST);
+			}
 		}
 	}
 }
-function drawMarker(rgba, x, y) {
-	fillRect(rgba, x, y, 74, 4, ACCENT);
+function drawTinySymbol(rgba, symbol, x, y, color) {
+	const glyph = TINY_ASCII_FONT[symbol];
+	if (!glyph) return;
+	for (let row = 0; row < TINY_GLYPH_HEIGHT; row++) {
+		const bits = glyph[row];
+		for (let col = 0; col < TINY_GLYPH_WIDTH; col++) if (bits[col] === "1") fillRect(rgba, x + col * TINY_SCALE, y + row * TINY_SCALE, TINY_SCALE, TINY_SCALE, color);
+	}
+}
+function centerPosition() {
+	return {
+		x: Math.round((FRAME_WIDTH - CODE_RENDER_WIDTH) / 2),
+		y: Math.round((FRAME_HEIGHT - CODE_RENDER_HEIGHT) / 2)
+	};
+}
+function slideDirection(seed, transitionIndex) {
+	const random$1 = new SeededRandom(`${seed}:slide-direction:${transitionIndex}`);
+	const directions = [
+		SlideDirection.Left,
+		SlideDirection.Right,
+		SlideDirection.Up,
+		SlideDirection.Down
+	];
+	return directions[random$1.nextInt(directions.length)];
+}
+function easeInOut(value) {
+	return value < .5 ? 2 * value * value : 1 - Math.pow(-2 * value + 2, 2) / 2;
 }
 function fillRect(rgba, x, y, width, height, color) {
 	for (let yy = y; yy < y + height; yy++) for (let xx = x; xx < x + width; xx++) setPixel(rgba, xx, yy, color);

@@ -1,0 +1,26 @@
+{
+  "name": "opencha",
+  "version": "0.0.0",
+  "description": "A simple verification gate that reduces low-effort pull request noise for maintainers.",
+  "license": "MIT",
+  "private": false,
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "verify": "pnpm typecheck && pnpm test && pnpm build"
+  },
+  "dependencies": {
+    "@actions/core": "^1.11.1",
+    "@actions/github": "^6.0.1",
+    "gifenc": "^1.0.3",
+    "yaml": "^2.8.1",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@types/node": "^24.9.2",
+    "tsdown": "^0.15.7",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.2"
+  }
+}

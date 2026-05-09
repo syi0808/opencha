@@ -1,0 +1,12 @@
+name: OpenCHA
+description: A simple verification gate that reduces low-effort pull request noise for maintainers.
+inputs:
+  github-token:
+    description: GitHub token used to read PR state and write labels, comments, checks, and assets.
+    required: true
+  opencha-secret:
+    description: Secret string used to encrypt OpenCHA challenge state.
+    required: true
+runs:
+  using: node24
+  main: dist/index.js

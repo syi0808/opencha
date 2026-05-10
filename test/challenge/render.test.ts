@@ -175,8 +175,8 @@ describe('challenge renderer', () => {
       const visibleSymbols = art.rows.join('').replaceAll(' ', '').length
 
       expect(art.rowCount, `${font.name} rows`).toBeGreaterThanOrEqual(28)
-      expect(art.columns, `${font.name} columns`).toBeGreaterThanOrEqual(130)
-      expect(visibleSymbols, `${font.name} visible symbol density`).toBeGreaterThanOrEqual(480)
+      expect(art.columns, `${font.name} columns`).toBeGreaterThanOrEqual(CODE_LENGTH_MAX * 18)
+      expect(visibleSymbols, `${font.name} visible symbol density`).toBeGreaterThanOrEqual(CODE_LENGTH_MAX * 65)
     }
   })
 

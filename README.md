@@ -76,7 +76,7 @@ policy:
   reverify_on_push: false
 ```
 
-`challenge.code_count` controls the number of visible codes and accepts values from 3 to 7.
+`challenge.code_count` controls the number of visible codes and accepts values from 3 to 7. Each generated code is independently randomized to 5 or 6 characters.
 
 ## Challenge Flow
 

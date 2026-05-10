@@ -1,7 +1,7 @@
 export const CHALLENGE_VERSION = 1
 export const CHALLENGE_CHARSET = 'ABCDEFGHJKLMNPQRTUVWXY346789'
-export const CODE_LENGTH_MIN = 4
-export const CODE_LENGTH_MAX = 7
+export const CODE_LENGTH_MIN = 5
+export const CODE_LENGTH_MAX = 6
 export const CODE_COUNT_MIN = 3
 export const CODE_COUNT_MAX = 7
 export const CODE_COUNT_DEFAULT = 5

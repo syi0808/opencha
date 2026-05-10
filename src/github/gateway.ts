@@ -28,6 +28,10 @@ export interface CheckRunInput {
   summary: string
 }
 
+export interface WrittenFile {
+  downloadUrl: string | null
+}
+
 export interface GitHubGateway {
   getRepositoryPermission(owner: string, repo: string, username: string): Promise<RepositoryPermission>
   getPullRequest(owner: string, repo: string, prNumber: number): Promise<PullRequestInfo>
@@ -43,6 +47,13 @@ export interface GitHubGateway {
   markPullRequestReady(prNodeId: string): Promise<void>
   readFile(owner: string, repo: string, path: string, ref: string): Promise<string | null>
   ensureBranch(owner: string, repo: string, branch: string, baseRef: string): Promise<void>
-  writeFile(owner: string, repo: string, branch: string, path: string, bytes: Uint8Array, message: string): Promise<void>
+  writeFile(
+    owner: string,
+    repo: string,
+    branch: string,
+    path: string,
+    bytes: Uint8Array,
+    message: string
+  ): Promise<WrittenFile>
   deleteFile(owner: string, repo: string, branch: string, path: string, message: string): Promise<void>
 }

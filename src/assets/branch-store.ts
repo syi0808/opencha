@@ -25,7 +25,7 @@ export class GitBranchAssetStore implements ChallengeAssetStore {
   }): Promise<{ url: string; assetRef: string }> {
     await this.gateway.ensureBranch(input.owner, input.repo, this.branch, this.baseRef)
     const path = `pr-${input.prNumber}/challenge-${shortId(input.challengeId)}.gif`
-    await this.gateway.writeFile(
+    const written = await this.gateway.writeFile(
       input.owner,
       input.repo,
       this.branch,
@@ -36,7 +36,9 @@ export class GitBranchAssetStore implements ChallengeAssetStore {
 
     const encodedPath = path.split('/').map(encodeURIComponent).join('/')
     return {
-      url: `https://raw.githubusercontent.com/${input.owner}/${input.repo}/${encodeURIComponent(this.branch)}/${encodedPath}`,
+      url:
+        written.downloadUrl ??
+        `https://raw.githubusercontent.com/${input.owner}/${input.repo}/${encodeURIComponent(this.branch)}/${encodedPath}`,
       assetRef: JSON.stringify({ backend: 'branch', branch: this.branch, path } satisfies BranchAssetRef)
     }
   }

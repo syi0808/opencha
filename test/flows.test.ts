@@ -297,8 +297,15 @@ class FakeGateway implements GitHubGateway {
 
   async ensureBranch(): Promise<void> {}
 
-  async writeFile(_owner: string, _repo: string, branch: string, path: string, bytes: Uint8Array): Promise<void> {
+  async writeFile(
+    _owner: string,
+    _repo: string,
+    branch: string,
+    path: string,
+    bytes: Uint8Array
+  ): Promise<{ downloadUrl: string | null }> {
     this.files.set(`${branch}:${path}`, bytes)
+    return { downloadUrl: `https://assets.example/${branch}/${path}` }
   }
 
   async deleteFile(_owner: string, _repo: string, branch: string, path: string): Promise<void> {

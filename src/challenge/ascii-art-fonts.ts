@@ -11,12 +11,22 @@ export const ASCII_ART_SYMBOL_HEIGHT = 5
 
 const FONT_SIZE_PX = 44
 const FONT_TRACKING_PX = -1
-const MIXED_FONT_SIZE_VARIANTS = [38, 40, 42, 44, 46] as const
+const MIXED_FONT_SIZE_VARIANTS = [36, 38, 40, 42, 44] as const
 const MIXED_ROTATION_DEGREES = [-7, -5, -3, 0, 3, 5, 7] as const
+const MIXED_JITTER_X_PX = [-3, -2, -1, 0, 1, 2, 3] as const
+const MIXED_JITTER_Y_PX = [-2, -1, 0, 1, 2] as const
+const MIXED_SCALE_X = [0.9, 0.95, 1, 1.05, 1.1] as const
+const MIXED_SCALE_Y = [0.92, 0.96, 1, 1.01, 1.02] as const
+const MIXED_SHEAR_X = [-0.16, -0.1, -0.05, 0, 0.05, 0.1, 0.16] as const
+const MIXED_OVERLAP_PX = [0, 2, 4, 6, 8] as const
+const MIXED_HOLE_COUNTS = [1, 1, 2, 2, 3] as const
 const MIXED_TRACKING_PX = 4
+const MIN_ADVANCE_PX = 8
 const RASTER_PADDING_PX = 2
 const CURVE_SEGMENTS = 14
 const COVERAGE_THRESHOLD = 0.22
+const HOLE_MIN_VISIBLE_CELLS = 16
+const HOLE_MIN_VISIBLE_RATIO = 0.78
 const COVERAGE_SAMPLES = [
   [0.17, 0.17],
   [0.5, 0.17],
@@ -47,6 +57,13 @@ export interface AsciiCharacterStyle {
   fontName: string
   fontSize: number
   rotationDegrees: number
+  jitterX: number
+  jitterY: number
+  scaleX: number
+  scaleY: number
+  shearX: number
+  overlapPx: number
+  holeCount: number
   advancePx: number
 }
 
@@ -83,12 +100,20 @@ interface CharacterRenderStyle {
   font: Font
   fontSize: number
   rotationDegrees: number
+  jitterX: number
+  jitterY: number
+  scaleX: number
+  scaleY: number
+  shearX: number
+  overlapPx: number
+  holeCount: number
   tracking: number
 }
 
 interface RenderedTextContours {
   contours: Point[][]
   characterStyles: AsciiCharacterStyle[]
+  characterBounds: Bounds[]
 }
 
 export const ASCII_ART_SYMBOL_PALETTE = [
@@ -204,7 +229,7 @@ function renderTtfAsciiRows(
     }
   }
 
-  const { contours, characterStyles } = textToContours(text, fontConfig, options)
+  const { contours, characterStyles, characterBounds } = textToContours(text, fontConfig, options)
   if (contours.length === 0) {
     return {
       rows: [' '],
@@ -236,8 +261,10 @@ function renderTtfAsciiRows(
     rows.push(row)
   }
 
+  const occludedRows = applyAsciiOcclusionRows(rows, bounds, characterBounds, characterStyles, text, options)
+
   return {
-    rows: cropEmptyColumns(cropEmptyRows(rows)),
+    rows: cropEmptyColumns(cropEmptyRows(occludedRows)),
     characterStyles
   }
 }
@@ -281,24 +308,40 @@ function textToContours(
   const baseline = Math.ceil(maxAscender) + RASTER_PADDING_PX
   const contours: Point[][] = []
   const characterStyles: AsciiCharacterStyle[] = []
+  const characterBounds: Bounds[] = []
   let cursorX = RASTER_PADDING_PX
 
   for (const style of renderStyles) {
     const glyph = style.font.charToGlyph(style.char)
     const scale = style.fontSize / style.font.unitsPerEm
     const path = glyph.getPath(cursorX, baseline, style.fontSize)
-    const glyphContours = rotateContours(
+    const glyphContours = transformContours(
       flattenPath(path.commands).filter((contour) => contour.length > 2),
-      style.rotationDegrees
+      style
     )
-    const advancePx = glyph.advanceWidth * scale + style.tracking
+    const advancePx = Math.max(
+      MIN_ADVANCE_PX,
+      glyph.advanceWidth * scale * style.scaleX + style.tracking - style.overlapPx
+    )
 
     contours.push(...glyphContours)
+    characterBounds.push(
+      glyphContours.length > 0
+        ? boundsForContours(glyphContours)
+        : { minX: cursorX, minY: baseline, maxX: cursorX, maxY: baseline }
+    )
     characterStyles.push({
       char: style.char,
       fontName: style.fontConfig.name,
       fontSize: style.fontSize,
       rotationDegrees: style.rotationDegrees,
+      jitterX: style.jitterX,
+      jitterY: style.jitterY,
+      scaleX: roundToHundredth(style.scaleX),
+      scaleY: roundToHundredth(style.scaleY),
+      shearX: roundToHundredth(style.shearX),
+      overlapPx: style.overlapPx,
+      holeCount: style.holeCount,
       advancePx: roundToTenth(advancePx)
     })
     cursorX += advancePx
@@ -306,7 +349,8 @@ function textToContours(
 
   return {
     contours: contours.filter((contour) => contour.length > 2),
-    characterStyles
+    characterStyles,
+    characterBounds
   }
 }
 
@@ -324,6 +368,13 @@ function selectCharacterRenderStyles(
       font: loadFont(fallbackFontConfig),
       fontSize: fallbackFontConfig.fontSize,
       rotationDegrees: 0,
+      jitterX: 0,
+      jitterY: 0,
+      scaleX: 1,
+      scaleY: 1,
+      shearX: 0,
+      overlapPx: 0,
+      holeCount: 0,
       tracking: fallbackFontConfig.tracking
     }))
   }
@@ -352,6 +403,28 @@ function selectCharacterRenderStyles(
         (charIndex + random.nextInt(MIXED_ROTATION_DEGREES.length)) %
           MIXED_ROTATION_DEGREES.length
       ] ?? 0
+    const jitterX =
+      MIXED_JITTER_X_PX[
+        (charIndex + random.nextInt(MIXED_JITTER_X_PX.length)) % MIXED_JITTER_X_PX.length
+      ] ?? 0
+    const jitterY =
+      MIXED_JITTER_Y_PX[
+        (charIndex + random.nextInt(MIXED_JITTER_Y_PX.length)) % MIXED_JITTER_Y_PX.length
+      ] ?? 0
+    const scaleX =
+      MIXED_SCALE_X[(charIndex + random.nextInt(MIXED_SCALE_X.length)) % MIXED_SCALE_X.length] ?? 1
+    const scaleY =
+      MIXED_SCALE_Y[(charIndex + random.nextInt(MIXED_SCALE_Y.length)) % MIXED_SCALE_Y.length] ?? 1
+    const shearX =
+      MIXED_SHEAR_X[(charIndex + random.nextInt(MIXED_SHEAR_X.length)) % MIXED_SHEAR_X.length] ?? 0
+    const overlapPx =
+      MIXED_OVERLAP_PX[
+        (charIndex + random.nextInt(MIXED_OVERLAP_PX.length)) % MIXED_OVERLAP_PX.length
+      ] ?? 0
+    const holeCount =
+      MIXED_HOLE_COUNTS[
+        (charIndex + random.nextInt(MIXED_HOLE_COUNTS.length)) % MIXED_HOLE_COUNTS.length
+      ] ?? 1
 
     return {
       char,
@@ -359,6 +432,13 @@ function selectCharacterRenderStyles(
       font: loadFont(fontConfig),
       fontSize,
       rotationDegrees,
+      jitterX,
+      jitterY,
+      scaleX,
+      scaleY,
+      shearX,
+      overlapPx,
+      holeCount,
       tracking: MIXED_TRACKING_PX
     }
   })
@@ -482,13 +562,21 @@ function rotationDegreesIndex(rotationDegrees: number): number {
   )
 }
 
-function rotateContours(contours: readonly Point[][], degrees: number): Point[][] {
-  if (degrees === 0 || contours.length === 0) return contours.map((contour) => [...contour])
+function transformContours(contours: readonly Point[][], style: CharacterRenderStyle): Point[][] {
+  const hasTransform =
+    style.rotationDegrees !== 0 ||
+    style.jitterX !== 0 ||
+    style.jitterY !== 0 ||
+    style.scaleX !== 1 ||
+    style.scaleY !== 1 ||
+    style.shearX !== 0
+
+  if (!hasTransform || contours.length === 0) return contours.map((contour) => [...contour])
 
   const bounds = boundsForContours(contours)
   const centerX = (bounds.minX + bounds.maxX) / 2
   const centerY = (bounds.minY + bounds.maxY) / 2
-  const radians = (degrees * Math.PI) / 180
+  const radians = (style.rotationDegrees * Math.PI) / 180
   const sin = Math.sin(radians)
   const cos = Math.cos(radians)
 
@@ -496,10 +584,13 @@ function rotateContours(contours: readonly Point[][], degrees: number): Point[][
     contour.map((point) => {
       const x = point.x - centerX
       const y = point.y - centerY
+      const scaledX = x * style.scaleX
+      const scaledY = y * style.scaleY
+      const shearedX = scaledX + scaledY * style.shearX
 
       return {
-        x: centerX + x * cos - y * sin,
-        y: centerY + x * sin + y * cos
+        x: centerX + shearedX * cos - scaledY * sin + style.jitterX,
+        y: centerY + shearedX * sin + scaledY * cos + style.jitterY
       }
     })
   )
@@ -507,6 +598,10 @@ function rotateContours(contours: readonly Point[][], degrees: number): Point[][
 
 function roundToTenth(value: number): number {
   return Math.round(value * 10) / 10
+}
+
+function roundToHundredth(value: number): number {
+  return Math.round(value * 100) / 100
 }
 
 function flattenPath(commands: readonly PathCommand[]): Point[][] {
@@ -670,6 +765,132 @@ function densitySymbol(coverage: number): string {
   const normalized = (coverage - COVERAGE_THRESHOLD) / (1 - COVERAGE_THRESHOLD)
   const index = Math.max(1, Math.ceil(normalized * (DENSITY_RAMP.length - 1)))
   return DENSITY_RAMP[index] ?? 'X'
+}
+
+function applyAsciiOcclusionRows(
+  rows: readonly string[],
+  rasterBounds: Bounds,
+  characterBounds: readonly Bounds[],
+  characterStyles: readonly AsciiCharacterStyle[],
+  text: string,
+  options: RenderAsciiCodeArtOptions
+): string[] {
+  const shouldApplyOcclusion = options.seed !== undefined || options.codeIndex !== undefined
+  if (!shouldApplyOcclusion || rows.length === 0 || characterStyles.length === 0) {
+    return [...rows]
+  }
+
+  const width = Math.max(0, ...rows.map((row) => row.length))
+  if (width === 0) return [...rows]
+
+  const matrix = rows.map((row) => [...row.padEnd(width, ' ')])
+  const seed = options.seed ?? 'ascii-art'
+  const codeIndex = options.codeIndex ?? 0
+
+  for (let charIndex = 0; charIndex < characterStyles.length; charIndex++) {
+    const style = characterStyles[charIndex] as AsciiCharacterStyle
+    if (style.holeCount <= 0) continue
+
+    const bounds = characterBounds[charIndex]
+    if (!bounds || !hasFiniteBounds(bounds)) continue
+
+    const minCol = clamp(Math.floor(bounds.minX - rasterBounds.minX), 0, width - 1)
+    const maxCol = clamp(Math.ceil(bounds.maxX - rasterBounds.minX), minCol, width - 1)
+    const minRow = clamp(Math.floor(bounds.minY - rasterBounds.minY), 0, matrix.length - 1)
+    const maxRow = clamp(Math.ceil(bounds.maxY - rasterBounds.minY), minRow, matrix.length - 1)
+    const initialVisible = collectVisibleCells(matrix, minCol, maxCol, minRow, maxRow)
+    if (initialVisible.length <= HOLE_MIN_VISIBLE_CELLS) continue
+
+    const minVisible = Math.max(
+      HOLE_MIN_VISIBLE_CELLS,
+      Math.floor(initialVisible.length * HOLE_MIN_VISIBLE_RATIO)
+    )
+    const random = new SeededRandom(`${seed}:ascii-art-holes:${codeIndex}:${text}:${charIndex}`)
+
+    for (let holeIndex = 0; holeIndex < style.holeCount; holeIndex++) {
+      const visible = collectVisibleCells(matrix, minCol, maxCol, minRow, maxRow)
+      if (visible.length <= minVisible) break
+
+      const anchor = visible[random.nextInt(visible.length)] as Point
+      const holeWidth = 2 + random.nextInt(3)
+      const holeHeight = 1 + random.nextInt(2)
+      const x = clamp(anchor.x - random.nextInt(holeWidth), minCol, maxCol)
+      const y = clamp(anchor.y - random.nextInt(holeHeight), minRow, maxRow)
+
+      clearAsciiRect(matrix, x, y, holeWidth, holeHeight, {
+        minCol,
+        maxCol,
+        minRow,
+        maxRow,
+        minVisible
+      })
+    }
+  }
+
+  return matrix.map((row) => row.join(''))
+}
+
+function collectVisibleCells(
+  matrix: readonly (readonly string[])[],
+  minCol: number,
+  maxCol: number,
+  minRow: number,
+  maxRow: number
+): Point[] {
+  const cells: Point[] = []
+
+  for (let row = minRow; row <= maxRow; row++) {
+    const values = matrix[row]
+    if (!values) continue
+
+    for (let col = minCol; col <= maxCol; col++) {
+      if (values[col] && values[col] !== ' ') cells.push({ x: col, y: row })
+    }
+  }
+
+  return cells
+}
+
+function clearAsciiRect(
+  matrix: string[][],
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  bounds: { minCol: number; maxCol: number; minRow: number; maxRow: number; minVisible: number }
+): void {
+  for (let row = y; row < y + height; row++) {
+    if (row < bounds.minRow || row > bounds.maxRow) continue
+
+    for (let col = x; col < x + width; col++) {
+      if (col < bounds.minCol || col > bounds.maxCol) continue
+      if (matrix[row]?.[col] === ' ') continue
+
+      const visible = collectVisibleCells(
+        matrix,
+        bounds.minCol,
+        bounds.maxCol,
+        bounds.minRow,
+        bounds.maxRow
+      )
+      if (visible.length <= bounds.minVisible) return
+
+      matrix[row]![col] = ' '
+    }
+  }
+}
+
+function hasFiniteBounds(bounds: Bounds): boolean {
+  return (
+    Number.isFinite(bounds.minX) &&
+    Number.isFinite(bounds.minY) &&
+    Number.isFinite(bounds.maxX) &&
+    Number.isFinite(bounds.maxY)
+  )
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value))
 }
 
 function cropEmptyRows(rows: readonly string[]): string[] {

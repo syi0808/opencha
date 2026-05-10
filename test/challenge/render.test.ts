@@ -89,7 +89,7 @@ describe('challenge renderer', () => {
     expect(allSymbols.size).toBeGreaterThanOrEqual(6)
   })
 
-  it('mixes fonts, sizes, and rotations within one seeded code', () => {
+  it('mixes affine character styles and cutouts within one seeded code', () => {
     const font = ASCII_ART_FONTS[0]!
     const options = { seed: 'mixed-character-seed', codeIndex: 2 }
     const art = renderAsciiCodeArt('A3K9X7', font, options)
@@ -101,6 +101,13 @@ describe('challenge renderer', () => {
     expect(new Set(art.characterStyles.map((style) => style.fontName)).size).toBeGreaterThan(1)
     expect(new Set(art.characterStyles.map((style) => style.fontSize)).size).toBeGreaterThan(1)
     expect(new Set(art.characterStyles.map((style) => style.rotationDegrees)).size).toBeGreaterThan(1)
+    expect(new Set(art.characterStyles.map((style) => style.jitterX)).size).toBeGreaterThan(1)
+    expect(new Set(art.characterStyles.map((style) => style.jitterY)).size).toBeGreaterThan(1)
+    expect(new Set(art.characterStyles.map((style) => style.scaleX)).size).toBeGreaterThan(1)
+    expect(new Set(art.characterStyles.map((style) => style.scaleY)).size).toBeGreaterThan(1)
+    expect(new Set(art.characterStyles.map((style) => style.shearX)).size).toBeGreaterThan(1)
+    expect(new Set(art.characterStyles.map((style) => style.overlapPx)).size).toBeGreaterThan(1)
+    expect(new Set(art.characterStyles.map((style) => style.holeCount)).size).toBeGreaterThan(1)
     expect(
       new Set(
         art.characterStyles.map(
@@ -110,10 +117,24 @@ describe('challenge renderer', () => {
     ).toBe(art.characterStyles.length)
 
     for (const style of art.characterStyles) {
-      expect(style.fontSize).toBeGreaterThanOrEqual(38)
-      expect(style.fontSize).toBeLessThanOrEqual(46)
+      expect(style.fontSize).toBeGreaterThanOrEqual(36)
+      expect(style.fontSize).toBeLessThanOrEqual(44)
       expect(style.rotationDegrees).toBeGreaterThanOrEqual(-7)
       expect(style.rotationDegrees).toBeLessThanOrEqual(7)
+      expect(style.jitterX).toBeGreaterThanOrEqual(-3)
+      expect(style.jitterX).toBeLessThanOrEqual(3)
+      expect(style.jitterY).toBeGreaterThanOrEqual(-2)
+      expect(style.jitterY).toBeLessThanOrEqual(2)
+      expect(style.scaleX).toBeGreaterThanOrEqual(0.9)
+      expect(style.scaleX).toBeLessThanOrEqual(1.1)
+      expect(style.scaleY).toBeGreaterThanOrEqual(0.92)
+      expect(style.scaleY).toBeLessThanOrEqual(1.02)
+      expect(style.shearX).toBeGreaterThanOrEqual(-0.16)
+      expect(style.shearX).toBeLessThanOrEqual(0.16)
+      expect(style.overlapPx).toBeGreaterThanOrEqual(0)
+      expect(style.overlapPx).toBeLessThanOrEqual(8)
+      expect(style.holeCount).toBeGreaterThanOrEqual(1)
+      expect(style.holeCount).toBeLessThanOrEqual(3)
       expect(style.advancePx).toBeGreaterThan(0)
     }
   })

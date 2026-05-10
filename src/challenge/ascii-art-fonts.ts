@@ -21,12 +21,64 @@ export interface AsciiCodeArt {
   heightPx: number
 }
 
-const DENSE_SYMBOLS = ['@', '#', '$', 'X'] as const
-const HATCH_SYMBOLS = ['/', '\\', 'x', '='] as const
-const OUTLINE_SYMBOLS = ['#', '+', '%', '&'] as const
-const DENSITY_SYMBOLS = ['.', ':', ';', '-', '=', '+', '*', '%', '&', '$', '#', '@'] as const
-const WEAVE_SYMBOLS = ['|', '/', '\\', '-', '=', '+', 'x', 'X'] as const
-const SPARK_SYMBOLS = ['.', ':', '*', '+', 'x', '%', '#', '@'] as const
+export const ASCII_ART_SYMBOL_PALETTE = [
+  '!',
+  '?',
+  '@',
+  '#',
+  '$',
+  '%',
+  '&',
+  '*',
+  '+',
+  '=',
+  '-',
+  '.',
+  ',',
+  ':',
+  ';',
+  '/',
+  '\\',
+  '|',
+  '_',
+  '~',
+  '^',
+  '<',
+  '>',
+  '[',
+  ']',
+  '{',
+  '}',
+  '(',
+  ')',
+  'x',
+  'X'
+] as const
+
+const DENSE_SYMBOLS = ['@', '#', '$', '%', '&', 'X'] as const
+const HATCH_SYMBOLS = ['/', '\\', '|', 'x', 'X', '=', '+', '-'] as const
+const OUTLINE_SYMBOLS = ['#', '+', '%', '&', '[', ']', '{', '}'] as const
+const DENSITY_SYMBOLS = [
+  '.',
+  ',',
+  ':',
+  ';',
+  '-',
+  '=',
+  '+',
+  '*',
+  'x',
+  'X',
+  '%',
+  '&',
+  '$',
+  '#',
+  '@'
+] as const
+const WEAVE_SYMBOLS = ['|', '/', '\\', '-', '=', '+', 'x', 'X', '<', '>', '^', '~'] as const
+const SPARK_SYMBOLS = ['.', ',', ':', ';', '!', '?', '*', '+', 'x', 'X', '%', '#', '@'] as const
+const SHARD_SYMBOLS = ['<', '>', '^', '~', '/', '\\', '[', ']', '{', '}', '(', ')'] as const
+const STATIC_SYMBOLS = ['.', ',', ':', ';', '!', '?', '*', '+', '=', '-', '_'] as const
 
 export const ASCII_ART_FONTS: readonly AsciiArtFont[] = [
   {
@@ -63,6 +115,16 @@ export const ASCII_ART_FONTS: readonly AsciiArtFont[] = [
     name: 'spark-noise',
     gapColumns: 2,
     renderGlyph: renderSparkGlyph
+  },
+  {
+    name: 'angle-shards',
+    gapColumns: 2,
+    renderGlyph: renderAngleGlyph
+  },
+  {
+    name: 'signal-static',
+    gapColumns: 2,
+    renderGlyph: renderStaticGlyph
   }
 ]
 
@@ -217,6 +279,54 @@ function renderSparkGlyph(glyph: GlyphRows): string[] {
   )
 }
 
+function renderAngleGlyph(glyph: GlyphRows): string[] {
+  return glyph.map((bits, row) =>
+    bits
+      .split('')
+      .map((bit, col) => {
+        const neighborCount = countOnNeighbors(glyph, row, col)
+
+        if (bit === '1') {
+          const left = isEdgePixel(glyph, row, col)
+            ? shardSymbol(row * 2 + col)
+            : densitySymbol(neighborCount + row + col)
+          return symbolPair(left, shardSymbol(neighborCount * 2 + row + col + 1))
+        }
+
+        if (neighborCount > 1 && (row + col) % 5 === 0) {
+          return symbolPair(staticSymbol(row + col), ' ')
+        }
+
+        return '  '
+      })
+      .join('')
+  )
+}
+
+function renderStaticGlyph(glyph: GlyphRows): string[] {
+  return glyph.map((bits, row) =>
+    bits
+      .split('')
+      .map((bit, col) => {
+        const neighborCount = countOnNeighbors(glyph, row, col)
+
+        if (bit === '1') {
+          return symbolPair(
+            staticSymbol(row * 3 + col + neighborCount),
+            densitySymbol(row + col * 2 + neighborCount)
+          )
+        }
+
+        if (neighborCount >= 2 && (row * GLYPH_WIDTH + col) % 3 === 0) {
+          return symbolPair(staticSymbol(row + col), staticSymbol(row * 2 + col))
+        }
+
+        return '  '
+      })
+      .join('')
+  )
+}
+
 function isEdgePixel(glyph: GlyphRows, row: number, col: number): boolean {
   return (
     row === 0 ||
@@ -273,6 +383,14 @@ function fringeSymbol(index: number): string {
 
 function sparkSymbol(index: number): string {
   return SPARK_SYMBOLS[index % SPARK_SYMBOLS.length] as string
+}
+
+function shardSymbol(index: number): string {
+  return SHARD_SYMBOLS[index % SHARD_SYMBOLS.length] as string
+}
+
+function staticSymbol(index: number): string {
+  return STATIC_SYMBOLS[index % STATIC_SYMBOLS.length] as string
 }
 
 function wireSymbol(glyph: GlyphRows, row: number, col: number): string {

@@ -1,4 +1,11 @@
 import { z } from 'zod'
+import {
+  CHALLENGE_LENGTH,
+  DECOY_COUNT_MAX,
+  DECOY_COUNT_MIN,
+  TARGET_INDEX_MAX,
+  TARGET_INDEX_MIN
+} from '../challenge/types'
 import { ConfigError } from '../errors'
 
 export const PAYLOAD_SCHEMA_VERSION = 1
@@ -14,12 +21,12 @@ export const challengePayloadSchema = z.object({
   challengeVersion: z.literal(1),
   seed: z.string().min(1),
   challengeParams: z.object({
-    length: z.literal(5),
-    decoyCount: z.literal(4),
+    length: z.literal(CHALLENGE_LENGTH),
+    decoyCount: z.number().int().min(DECOY_COUNT_MIN).max(DECOY_COUNT_MAX),
     animationFrames: z.number().int().min(8).max(32),
     charset: z.string().min(1),
     noiseLevel: z.literal('medium'),
-    targetIndex: z.number().int().min(2).max(5)
+    targetIndex: z.number().int().min(TARGET_INDEX_MIN).max(TARGET_INDEX_MAX)
   }),
   answerSalt: z.string().min(1),
   answerHash: z.string().min(1),

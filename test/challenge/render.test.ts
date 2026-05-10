@@ -1,12 +1,19 @@
 import {
   ASCII_ART_FONTS,
+  ASCII_ART_SYMBOL_PALETTE,
   hasAsciiArtGlyph,
   renderAsciiCodeArt,
   selectAsciiArtFont
 } from '../../src/challenge/ascii-art-fonts'
 import { createChallenge } from '../../src/challenge/generate'
-import { CODE_HOLD_FRAMES, FRAME_HEIGHT, FRAME_WIDTH, renderChallengeFrames } from '../../src/challenge/render'
-import { ANIMATION_FRAMES, CHALLENGE_CHARSET, DECOY_COUNT } from '../../src/challenge/types'
+import {
+  CODE_HOLD_FRAMES,
+  FRAME_HEIGHT,
+  FRAME_WIDTH,
+  hasTinyAsciiGlyph,
+  renderChallengeFrames
+} from '../../src/challenge/render'
+import { ANIMATION_FRAMES, CHALLENGE_CHARSET } from '../../src/challenge/types'
 
 describe('challenge renderer', () => {
   it('has ASCII-art glyphs for every challenge character across every font', () => {
@@ -33,25 +40,32 @@ describe('challenge renderer', () => {
   })
 
   it('uses a broad printable ASCII palette for generated text art', () => {
-    expect(ASCII_ART_FONTS.length).toBeGreaterThanOrEqual(6)
+    expect(ASCII_ART_FONTS.length).toBeGreaterThanOrEqual(8)
+    expect(ASCII_ART_SYMBOL_PALETTE.length).toBeGreaterThanOrEqual(30)
 
     const allSymbols = new Set<string>()
+    const allowedSymbols = new Set<string>(ASCII_ART_SYMBOL_PALETTE)
+
+    for (const symbol of ASCII_ART_SYMBOL_PALETTE) {
+      expect(hasTinyAsciiGlyph(symbol), `missing tiny renderer glyph for ${symbol}`).toBe(true)
+    }
 
     for (const font of ASCII_ART_FONTS) {
       const art = renderAsciiCodeArt('A3K9X', font)
       const fontSymbols = new Set(art.rows.join('').replaceAll(' ', '').split(''))
 
-      expect(fontSymbols.size, `${font.name} symbol count`).toBeGreaterThanOrEqual(3)
+      expect(fontSymbols.size, `${font.name} symbol count`).toBeGreaterThanOrEqual(4)
 
       for (const symbol of fontSymbols) {
         const codePoint = symbol.charCodeAt(0)
         expect(codePoint, `${font.name} ${symbol}`).toBeGreaterThanOrEqual(33)
         expect(codePoint, `${font.name} ${symbol}`).toBeLessThanOrEqual(126)
+        expect(allowedSymbols.has(symbol), `${font.name} ${symbol}`).toBe(true)
         allSymbols.add(symbol)
       }
     }
 
-    expect(allSymbols.size).toBeGreaterThanOrEqual(12)
+    expect(allSymbols.size).toBeGreaterThanOrEqual(24)
   })
 
   it('keeps every ASCII-art font within the GIF frame', () => {
@@ -70,7 +84,9 @@ describe('challenge renderer', () => {
     const frames = renderChallengeFrames(challenge)
 
     expect(ANIMATION_FRAMES).toBeGreaterThan(8)
-    expect(frames).toHaveLength((DECOY_COUNT + 1) * CODE_HOLD_FRAMES + DECOY_COUNT * ANIMATION_FRAMES)
+    expect(frames).toHaveLength(
+      challenge.codes.length * CODE_HOLD_FRAMES + (challenge.codes.length - 1) * ANIMATION_FRAMES
+    )
 
     for (const frame of frames) {
       expect(frame.width).toBe(FRAME_WIDTH)

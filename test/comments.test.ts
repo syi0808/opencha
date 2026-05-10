@@ -1,4 +1,10 @@
-import { extractEncryptedPayload, renderChallengeComment, renderPassedChallengeComment } from '../src/state/comments'
+import {
+  extractEncryptedPayload,
+  renderChallengeComment,
+  renderExceededComment,
+  renderPassComment,
+  renderPassedChallengeComment
+} from '../src/state/comments'
 import type { ChallengePayload } from '../src/state/payload'
 
 describe('OpenCHA comments', () => {
@@ -17,11 +23,22 @@ describe('OpenCHA comments', () => {
       now: new Date('2026-01-01T00:00:00.000Z')
     })
 
+    expect(body).toContain('## 🧩 OpenCHA verification')
+    expect(body).toContain('> [!IMPORTANT]')
+    expect(body).toContain('| Status | Target | Attempts |')
     expect(body).toContain('/opencha answer YOUR_CODE')
-    expect(body).toContain('Enter the 3rd code')
+    expect(body).toContain('**3rd code**')
+    expect(body).toContain('<details>')
+    expect(body).toContain('<kbd>/opencha approve</kbd>')
     expect(body).not.toContain(payload.answerHash)
     expect(renderPassedChallengeComment({ ...payload, passed: true, passedBy: 'alice' }, 'encrypted')).toContain(
       'passed by @alice'
+    )
+    expect(renderPassComment({ ...payload, passed: true, passedBy: 'alice', passMethod: 'answer' })).toContain(
+      '## ✅ OpenCHA passed'
+    )
+    expect(renderExceededComment({ ...payload, exceeded: true, attempts: 5 }, 'encrypted')).toContain(
+      '## 🚫 OpenCHA needs a maintainer'
     )
   })
 })

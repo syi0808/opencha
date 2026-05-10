@@ -50,7 +50,7 @@ describe('OpenCHA flows', () => {
     expect(gateway.pr.isDraft).toBe(false)
     expect(gateway.labels).not.toContain('opencha: verifying')
     expect(gateway.latestCheck()?.conclusion).toBe('success')
-    expect(gateway.comments.some((comment) => comment.body === 'OpenCHA verification passed.')).toBe(true)
+    expect(gateway.comments.some((comment) => comment.body.includes('## ✅ OpenCHA passed'))).toBe(true)
     expect(gateway.minimizedNodeIds.size).toBeGreaterThanOrEqual(1)
     expect(gateway.files.size).toBe(0)
   })
@@ -132,7 +132,7 @@ describe('OpenCHA flows', () => {
     if (passed.kind !== 'passed') throw new Error('expected passed state')
     expect(passed.payload.passMethod).toBe('approve')
     expect(passed.payload.passedBy).toBe('maintainer')
-    expect(gateway.comments.some((comment) => comment.body === 'OpenCHA verification manually approved by @maintainer.')).toBe(true)
+    expect(gateway.comments.some((comment) => comment.body.includes('Maintainer @maintainer approved this PR.'))).toBe(true)
   })
 
   it('does not let a trusted maintainer pass with answer command', async () => {

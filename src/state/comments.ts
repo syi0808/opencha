@@ -29,13 +29,25 @@ export function extractEncryptedPayload(body: string): string | null {
 
 export function renderChallengeComment(input: ChallengeCommentInput): string {
   const cooldownText = renderCooldown(input.payload, input.now)
+  const cooldownLines = cooldownText
+    ? [
+        '',
+        '> [!WARNING]',
+        `> Next attempt available in about ${cooldownText}.`
+      ]
+    : []
+
   return [
     CHALLENGE_MARKER,
-    '## OpenCHA verification',
+    '## 🧩 OpenCHA verification',
     '',
-    'This PR is temporarily gated because it was opened by an outside contributor.',
+    '> [!IMPORTANT]',
+    '> This PR is waiting on a quick visual check because it was opened by an outside contributor.',
     '',
-    `Enter the ${ordinal(input.targetIndex)} code shown in the animation:`,
+    '| Status | Target | Attempts |',
+    '| --- | ---: | ---: |',
+    `| ⏳ Waiting for answer | **${ordinal(input.targetIndex)} code** | **${attemptsRemaining(input.payload)} left** |`,
+    ...cooldownLines,
     '',
     `![OpenCHA challenge](${input.assetUrl})`,
     '',
@@ -45,21 +57,32 @@ export function renderChallengeComment(input: ChallengeCommentInput): string {
     '/opencha answer YOUR_CODE',
     '```',
     '',
-    `Attempts remaining: ${attemptsRemaining(input.payload)}`,
-    cooldownText ? `Next attempt available in about ${cooldownText}.` : '',
+    '<details>',
+    '<summary>Why this check exists</summary>',
+    '',
+    'OpenCHA asks outside contributors to solve a small visual challenge before the PR is ready for review.',
+    '',
+    'A maintainer can bypass the check with <kbd>/opencha approve</kbd>.',
+    '',
+    '</details>',
     '',
     `${PAYLOAD_PREFIX}${input.encryptedPayload}${PAYLOAD_SUFFIX}`
-  ].filter((line) => line !== '').join('\n')
+  ].join('\n')
 }
 
 export function renderExceededComment(payload: ChallengePayload, encryptedPayload: string): string {
   return [
     CHALLENGE_MARKER,
-    '## OpenCHA verification',
+    '## 🚫 OpenCHA needs a maintainer',
     '',
-    'Maintainer review required.',
+    '> [!WARNING]',
+    '> The challenge is locked because the answer limit was reached.',
     '',
-    'The maximum number of answer attempts has been reached. A maintainer can run:',
+    '| Status | Attempts |',
+    '| --- | ---: |',
+    `| 🔒 Locked | **${attemptsRemaining(payload)} left** |`,
+    '',
+    'A maintainer can choose one:',
     '',
     '```text',
     '/opencha approve',
@@ -76,9 +99,13 @@ export function renderPassedChallengeComment(payload: ChallengePayload, encrypte
   const actor = payload.passedBy ? ` by @${payload.passedBy}` : ''
   return [
     CHALLENGE_MARKER,
-    '## OpenCHA verification',
+    '## ✅ OpenCHA passed',
     '',
     `OpenCHA verification passed${actor}.`,
+    '',
+    '| Result | Method |',
+    '| --- | --- |',
+    `| ✅ Passed | ${passMethodLabel(payload)} |`,
     '',
     `${PAYLOAD_PREFIX}${encryptedPayload}${PAYLOAD_SUFFIX}`
   ].join('\n')
@@ -86,9 +113,25 @@ export function renderPassedChallengeComment(payload: ChallengePayload, encrypte
 
 export function renderPassComment(payload: ChallengePayload): string {
   if (payload.passMethod === 'approve' && payload.passedBy) {
-    return `OpenCHA verification manually approved by @${payload.passedBy}.`
+    return [
+      '## ✅ OpenCHA approved',
+      '',
+      `Maintainer @${payload.passedBy} approved this PR.`,
+      '',
+      '| Result | Method |',
+      '| --- | --- |',
+      '| ✅ Passed | Maintainer approval |'
+    ].join('\n')
   }
-  return 'OpenCHA verification passed.'
+  return [
+    '## ✅ OpenCHA passed',
+    '',
+    'Thanks. This PR is ready for maintainer review.',
+    '',
+    '| Result | Method |',
+    '| --- | --- |',
+    '| ✅ Passed | Visual challenge answer |'
+  ].join('\n')
 }
 
 function renderCooldown(payload: ChallengePayload, now: Date): string | null {
@@ -101,4 +144,8 @@ function renderCooldown(payload: ChallengePayload, now: Date): string | null {
 function ordinal(value: number): string {
   const suffix = value === 1 ? 'st' : value === 2 ? 'nd' : value === 3 ? 'rd' : 'th'
   return `${value}${suffix}`
+}
+
+function passMethodLabel(payload: ChallengePayload): string {
+  return payload.passMethod === 'approve' ? 'Maintainer approval' : 'Visual challenge answer'
 }

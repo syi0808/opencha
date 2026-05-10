@@ -23,6 +23,10 @@ export interface AsciiCodeArt {
 
 const DENSE_SYMBOLS = ['@', '#', '$', 'X'] as const
 const HATCH_SYMBOLS = ['/', '\\', 'x', '='] as const
+const OUTLINE_SYMBOLS = ['#', '+', '%', '&'] as const
+const DENSITY_SYMBOLS = ['.', ':', ';', '-', '=', '+', '*', '%', '&', '$', '#', '@'] as const
+const WEAVE_SYMBOLS = ['|', '/', '\\', '-', '=', '+', 'x', 'X'] as const
+const SPARK_SYMBOLS = ['.', ':', '*', '+', 'x', '%', '#', '@'] as const
 
 export const ASCII_ART_FONTS: readonly AsciiArtFont[] = [
   {
@@ -44,6 +48,21 @@ export const ASCII_ART_FONTS: readonly AsciiArtFont[] = [
     name: 'drop-shadow',
     gapColumns: 2,
     renderGlyph: renderShadowGlyph
+  },
+  {
+    name: 'density-ramp',
+    gapColumns: 2,
+    renderGlyph: renderDensityGlyph
+  },
+  {
+    name: 'wire-weave',
+    gapColumns: 2,
+    renderGlyph: renderWireGlyph
+  },
+  {
+    name: 'spark-noise',
+    gapColumns: 2,
+    renderGlyph: renderSparkGlyph
   }
 ]
 
@@ -85,7 +104,7 @@ function renderSolidGlyph(glyph: GlyphRows): string[] {
   return glyph.map((bits, row) =>
     bits
       .split('')
-      .map((bit, col) => (bit === '1' ? repeatSymbol(denseSymbol(row + col)) : '  '))
+      .map((bit, col) => (bit === '1' ? samePair(denseSymbol(row + col)) : '  '))
       .join('')
   )
 }
@@ -94,7 +113,7 @@ function renderHatchGlyph(glyph: GlyphRows): string[] {
   return glyph.map((bits, row) =>
     bits
       .split('')
-      .map((bit, col) => (bit === '1' ? repeatSymbol(hatchSymbol(row * 2 + col)) : '  '))
+      .map((bit, col) => (bit === '1' ? samePair(hatchSymbol(row * 2 + col)) : '  '))
       .join('')
   )
 }
@@ -106,7 +125,12 @@ function renderOutlineGlyph(glyph: GlyphRows): string[] {
       .map((bit, col) => {
         if (bit !== '1') return '  '
         const edge = isEdgePixel(glyph, row, col)
-        return edge ? (row + col) % 2 === 0 ? '#+' : '+#' : '  '
+        return edge
+          ? symbolPair(
+              OUTLINE_SYMBOLS[(row + col) % OUTLINE_SYMBOLS.length] as string,
+              OUTLINE_SYMBOLS[(row * 2 + col + 1) % OUTLINE_SYMBOLS.length] as string
+            )
+          : '  '
       })
       .join('')
   )
@@ -116,7 +140,7 @@ function renderShadowGlyph(glyph: GlyphRows): string[] {
   return Array.from({ length: GLYPH_HEIGHT + 1 }, (_, row) =>
     Array.from({ length: GLYPH_WIDTH }, (_unused, col) => {
       if (glyph[row]?.[col] === '1') {
-        return repeatSymbol(denseSymbol(row + col))
+        return samePair(denseSymbol(row + col))
       }
 
       if (row > 0 && glyph[row - 1]?.[Math.max(0, col - 1)] === '1') {
@@ -125,6 +149,71 @@ function renderShadowGlyph(glyph: GlyphRows): string[] {
 
       return '  '
     }).join('')
+  )
+}
+
+function renderDensityGlyph(glyph: GlyphRows): string[] {
+  return glyph.map((bits, row) =>
+    bits
+      .split('')
+      .map((bit, col) => {
+        const neighborCount = countOnNeighbors(glyph, row, col)
+
+        if (bit === '1') {
+          return symbolPair(
+            densitySymbol(neighborCount * 2 + row + col),
+            densitySymbol(neighborCount * 3 + row * 2 + col + 1)
+          )
+        }
+
+        if (neighborCount > 0 && (row + col) % 4 === 0) {
+          return symbolPair(fringeSymbol(row + col), ' ')
+        }
+
+        return '  '
+      })
+      .join('')
+  )
+}
+
+function renderWireGlyph(glyph: GlyphRows): string[] {
+  return glyph.map((bits, row) =>
+    bits
+      .split('')
+      .map((bit, col) => {
+        if (bit !== '1') return '  '
+
+        if (isEdgePixel(glyph, row, col)) {
+          return symbolPair(wireSymbol(glyph, row, col), weaveSymbol(row * 3 + col))
+        }
+
+        return symbolPair('.', densitySymbol(row + col))
+      })
+      .join('')
+  )
+}
+
+function renderSparkGlyph(glyph: GlyphRows): string[] {
+  return glyph.map((bits, row) =>
+    bits
+      .split('')
+      .map((bit, col) => {
+        const neighborCount = countOnNeighbors(glyph, row, col)
+
+        if (bit === '1') {
+          return symbolPair(
+            sparkSymbol(row * GLYPH_WIDTH + col + neighborCount),
+            sparkSymbol(row + col * 2 + neighborCount)
+          )
+        }
+
+        if (neighborCount >= 3 && (row * 2 + col) % 5 === 0) {
+          return symbolPair('.', ':')
+        }
+
+        return '  '
+      })
+      .join('')
   )
 }
 
@@ -141,8 +230,25 @@ function isEdgePixel(glyph: GlyphRows, row: number, col: number): boolean {
   )
 }
 
-function repeatSymbol(symbol: string): string {
+function countOnNeighbors(glyph: GlyphRows, row: number, col: number): number {
+  let count = 0
+
+  for (let y = row - 1; y <= row + 1; y++) {
+    for (let x = col - 1; x <= col + 1; x++) {
+      if (y === row && x === col) continue
+      if (glyph[y]?.[x] === '1') count += 1
+    }
+  }
+
+  return count
+}
+
+function samePair(symbol: string): string {
   return symbol + symbol
+}
+
+function symbolPair(left: string, right: string): string {
+  return left + right
 }
 
 function denseSymbol(index: number): string {
@@ -151,6 +257,34 @@ function denseSymbol(index: number): string {
 
 function hatchSymbol(index: number): string {
   return HATCH_SYMBOLS[index % HATCH_SYMBOLS.length] as string
+}
+
+function densitySymbol(index: number): string {
+  return DENSITY_SYMBOLS[index % DENSITY_SYMBOLS.length] as string
+}
+
+function weaveSymbol(index: number): string {
+  return WEAVE_SYMBOLS[index % WEAVE_SYMBOLS.length] as string
+}
+
+function fringeSymbol(index: number): string {
+  return index % 2 === 0 ? '.' : ':'
+}
+
+function sparkSymbol(index: number): string {
+  return SPARK_SYMBOLS[index % SPARK_SYMBOLS.length] as string
+}
+
+function wireSymbol(glyph: GlyphRows, row: number, col: number): string {
+  const up = glyph[row - 1]?.[col] === '1'
+  const down = glyph[row + 1]?.[col] === '1'
+  const left = glyph[row]?.[col - 1] === '1'
+  const right = glyph[row]?.[col + 1] === '1'
+
+  if ((up || down) && (left || right)) return '+'
+  if (up || down) return '|'
+  if (left || right) return '-'
+  return weaveSymbol(row + col)
 }
 
 function blankGlyphRows(rowCount: number): string[] {

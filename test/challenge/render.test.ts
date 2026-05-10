@@ -32,6 +32,28 @@ describe('challenge renderer', () => {
     expect(new Set(selected).size).toBeGreaterThan(1)
   })
 
+  it('uses a broad printable ASCII palette for generated text art', () => {
+    expect(ASCII_ART_FONTS.length).toBeGreaterThanOrEqual(6)
+
+    const allSymbols = new Set<string>()
+
+    for (const font of ASCII_ART_FONTS) {
+      const art = renderAsciiCodeArt('A3K9X', font)
+      const fontSymbols = new Set(art.rows.join('').replaceAll(' ', '').split(''))
+
+      expect(fontSymbols.size, `${font.name} symbol count`).toBeGreaterThanOrEqual(3)
+
+      for (const symbol of fontSymbols) {
+        const codePoint = symbol.charCodeAt(0)
+        expect(codePoint, `${font.name} ${symbol}`).toBeGreaterThanOrEqual(33)
+        expect(codePoint, `${font.name} ${symbol}`).toBeLessThanOrEqual(126)
+        allSymbols.add(symbol)
+      }
+    }
+
+    expect(allSymbols.size).toBeGreaterThanOrEqual(12)
+  })
+
   it('keeps every ASCII-art font within the GIF frame', () => {
     const code = CHALLENGE_CHARSET.slice(0, 5)
 

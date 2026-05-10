@@ -32435,6 +32435,102 @@ const GLYPH_WIDTH = 5;
 const GLYPH_HEIGHT = 7;
 
 //#endregion
+//#region src/challenge/ascii-art-fonts.ts
+const ASCII_ART_CELL_ADVANCE_X = 5;
+const ASCII_ART_CELL_ADVANCE_Y = 10;
+const ASCII_ART_SYMBOL_WIDTH = 6;
+const ASCII_ART_SYMBOL_HEIGHT = 10;
+const DENSE_SYMBOLS = [
+	"@",
+	"#",
+	"$",
+	"X"
+];
+const HATCH_SYMBOLS = [
+	"/",
+	"\\",
+	"x",
+	"="
+];
+const ASCII_ART_FONTS = [
+	{
+		name: "solid-block",
+		gapColumns: 2,
+		renderGlyph: renderSolidGlyph
+	},
+	{
+		name: "scanline-hatch",
+		gapColumns: 2,
+		renderGlyph: renderHatchGlyph
+	},
+	{
+		name: "poster-outline",
+		gapColumns: 3,
+		renderGlyph: renderOutlineGlyph
+	},
+	{
+		name: "drop-shadow",
+		gapColumns: 2,
+		renderGlyph: renderShadowGlyph
+	}
+];
+function selectAsciiArtFont(seed, codeIndex) {
+	return new SeededRandom(`${seed}:ascii-art-font:${codeIndex}`).pick(ASCII_ART_FONTS);
+}
+function renderAsciiCodeArt(code, font) {
+	const glyphRows = [...code].map((char) => {
+		const glyph = BITMAP_FONT[char];
+		return glyph ? font.renderGlyph(glyph) : blankGlyphRows(GLYPH_HEIGHT);
+	});
+	const rowCount = Math.max(0, ...glyphRows.map((rows$1) => rows$1.length));
+	const rows = Array.from({ length: rowCount }, (_, row) => glyphRows.map((rows$1) => rows$1[row] ?? "".padEnd(GLYPH_WIDTH * 2, " ")).join(" ".repeat(font.gapColumns)));
+	const columns = Math.max(0, ...rows.map((row) => row.length));
+	const normalizedRows = rows.map((row) => row.padEnd(columns, " "));
+	return {
+		fontName: font.name,
+		rows: normalizedRows,
+		columns,
+		rowCount,
+		widthPx: columns > 0 ? (columns - 1) * ASCII_ART_CELL_ADVANCE_X + ASCII_ART_SYMBOL_WIDTH : 0,
+		heightPx: rowCount > 0 ? (rowCount - 1) * ASCII_ART_CELL_ADVANCE_Y + ASCII_ART_SYMBOL_HEIGHT : 0
+	};
+}
+function renderSolidGlyph(glyph) {
+	return glyph.map((bits, row) => bits.split("").map((bit, col) => bit === "1" ? repeatSymbol(denseSymbol(row + col)) : "  ").join(""));
+}
+function renderHatchGlyph(glyph) {
+	return glyph.map((bits, row) => bits.split("").map((bit, col) => bit === "1" ? repeatSymbol(hatchSymbol(row * 2 + col)) : "  ").join(""));
+}
+function renderOutlineGlyph(glyph) {
+	return glyph.map((bits, row) => bits.split("").map((bit, col) => {
+		if (bit !== "1") return "  ";
+		return isEdgePixel(glyph, row, col) ? (row + col) % 2 === 0 ? "#+" : "+#" : "  ";
+	}).join(""));
+}
+function renderShadowGlyph(glyph) {
+	return Array.from({ length: GLYPH_HEIGHT + 1 }, (_, row) => Array.from({ length: GLYPH_WIDTH }, (_unused, col) => {
+		if (glyph[row]?.[col] === "1") return repeatSymbol(denseSymbol(row + col));
+		if (row > 0 && glyph[row - 1]?.[Math.max(0, col - 1)] === "1") return "::";
+		return "  ";
+	}).join(""));
+}
+function isEdgePixel(glyph, row, col) {
+	return row === 0 || row === GLYPH_HEIGHT - 1 || col === 0 || col === GLYPH_WIDTH - 1 || glyph[row - 1]?.[col] !== "1" || glyph[row + 1]?.[col] !== "1" || glyph[row]?.[col - 1] !== "1" || glyph[row]?.[col + 1] !== "1";
+}
+function repeatSymbol(symbol) {
+	return symbol + symbol;
+}
+function denseSymbol(index) {
+	return DENSE_SYMBOLS[index % DENSE_SYMBOLS.length];
+}
+function hatchSymbol(index) {
+	return HATCH_SYMBOLS[index % HATCH_SYMBOLS.length];
+}
+function blankGlyphRows(rowCount) {
+	return Array.from({ length: rowCount }, () => "".padEnd(GLYPH_WIDTH * 2, " "));
+}
+
+//#endregion
 //#region src/challenge/render.ts
 const FRAME_WIDTH = 360;
 const FRAME_HEIGHT = 120;
@@ -32485,6 +32581,27 @@ const TINY_ASCII_FONT = {
 		"100",
 		"111"
 	],
+	"$": [
+		"111",
+		"110",
+		"111",
+		"011",
+		"111"
+	],
+	X: [
+		"101",
+		"101",
+		"010",
+		"101",
+		"101"
+	],
+	x: [
+		"000",
+		"101",
+		"010",
+		"101",
+		"000"
+	],
 	"%": [
 		"101",
 		"001",
@@ -32520,6 +32637,34 @@ const TINY_ASCII_FONT = {
 		"111",
 		"000"
 	],
+	":": [
+		"000",
+		"010",
+		"000",
+		"010",
+		"000"
+	],
+	";": [
+		"000",
+		"010",
+		"000",
+		"010",
+		"100"
+	],
+	".": [
+		"000",
+		"000",
+		"000",
+		"000",
+		"010"
+	],
+	"-": [
+		"000",
+		"000",
+		"111",
+		"000",
+		"000"
+	],
 	"/": [
 		"001",
 		"001",
@@ -32549,14 +32694,6 @@ const TINY_ASCII_FONT = {
 		"111"
 	]
 };
-const INK_SYMBOLS = [
-	"#",
-	"@",
-	"%",
-	"&",
-	"*",
-	"+"
-];
 const DUST_SYMBOLS = [
 	"+",
 	"=",
@@ -32568,12 +32705,6 @@ const DUST_SYMBOLS = [
 const TINY_SCALE = 2;
 const TINY_GLYPH_WIDTH = 3;
 const TINY_GLYPH_HEIGHT = 5;
-const CELL_STRIDE_X = 7;
-const CELL_STRIDE_Y = 9;
-const LETTER_GAP = 8;
-const CHALLENGE_CODE_LENGTH = 5;
-const CODE_RENDER_WIDTH = CHALLENGE_CODE_LENGTH * GLYPH_WIDTH * CELL_STRIDE_X + (CHALLENGE_CODE_LENGTH - 1) * LETTER_GAP;
-const CODE_RENDER_HEIGHT = GLYPH_HEIGHT * CELL_STRIDE_Y;
 var SlideDirection = /* @__PURE__ */ function(SlideDirection$1) {
 	SlideDirection$1["Left"] = "left";
 	SlideDirection$1["Right"] = "right";
@@ -32583,23 +32714,24 @@ var SlideDirection = /* @__PURE__ */ function(SlideDirection$1) {
 }(SlideDirection || {});
 function renderChallengeFrames(challenge) {
 	const frames = [];
+	const codeArt = challenge.codes.map((code, codeIndex) => renderAsciiCodeArt(code, selectAsciiArtFont(challenge.seed, codeIndex)));
 	for (let codeIndex = 0; codeIndex < challenge.codes.length; codeIndex++) {
-		const code = challenge.codes[codeIndex];
-		for (let holdIndex = 0; holdIndex < CODE_HOLD_FRAMES; holdIndex++) frames.push(renderHoldFrame(challenge, code, codeIndex, holdIndex));
+		const art = codeArt[codeIndex];
+		for (let holdIndex = 0; holdIndex < CODE_HOLD_FRAMES; holdIndex++) frames.push(renderHoldFrame(challenge, art, codeIndex, holdIndex));
 		if (codeIndex + 1 < challenge.codes.length) {
-			const nextCode = challenge.codes[codeIndex + 1];
-			for (let frameIndex = 0; frameIndex < challenge.params.animationFrames; frameIndex++) frames.push(renderTransitionFrame(challenge, code, nextCode, codeIndex, frameIndex));
+			const nextArt = codeArt[codeIndex + 1];
+			for (let frameIndex = 0; frameIndex < challenge.params.animationFrames; frameIndex++) frames.push(renderTransitionFrame(challenge, art, nextArt, codeIndex, frameIndex));
 		}
 	}
 	return frames;
 }
-function renderHoldFrame(challenge, code, codeIndex, holdIndex) {
+function renderHoldFrame(challenge, art, codeIndex, holdIndex) {
 	const rgba = new Uint8Array(FRAME_WIDTH * FRAME_HEIGHT * 4);
 	const random$1 = new SeededRandom(`${challenge.seed}:hold:${codeIndex}:${holdIndex}`);
 	prepareCanvas(rgba, random$1);
 	const pulse = Math.sin(holdIndex / CODE_HOLD_FRAMES * Math.PI * 2);
-	const base = centerPosition();
-	drawAsciiArtCode(rgba, code, base.x + Math.round(pulse * 2) + random$1.nextInt(3) - 1, base.y + random$1.nextInt(3) - 1, TEXT, random$1);
+	const base = centerPosition(art);
+	drawAsciiArtRows(rgba, art, base.x + Math.round(pulse * 2) + random$1.nextInt(3) - 1, base.y + random$1.nextInt(3) - 1, TEXT);
 	drawObstruction(rgba, random$1);
 	return {
 		width: FRAME_WIDTH,
@@ -32608,22 +32740,23 @@ function renderHoldFrame(challenge, code, codeIndex, holdIndex) {
 		delayMs: FRAME_DELAY_MS
 	};
 }
-function renderTransitionFrame(challenge, sourceCode, targetCode, transitionIndex, frameIndex) {
+function renderTransitionFrame(challenge, sourceArt, targetArt, transitionIndex, frameIndex) {
 	const rgba = new Uint8Array(FRAME_WIDTH * FRAME_HEIGHT * 4);
 	const random$1 = new SeededRandom(`${challenge.seed}:transition:${transitionIndex}:${frameIndex}`);
 	prepareCanvas(rgba, random$1);
 	const progress = easeInOut(frameIndex / Math.max(1, challenge.params.animationFrames - 1));
 	const direction = slideDirection(challenge.seed, transitionIndex);
-	const base = centerPosition();
-	const distance = direction === SlideDirection.Left || direction === SlideDirection.Right ? CODE_RENDER_WIDTH + 64 : CODE_RENDER_HEIGHT + 36;
+	const sourceBase = centerPosition(sourceArt);
+	const targetBase = centerPosition(targetArt);
+	const distance = direction === SlideDirection.Left || direction === SlideDirection.Right ? Math.max(sourceArt.widthPx, targetArt.widthPx) + 64 : Math.max(sourceArt.heightPx, targetArt.heightPx) + 36;
 	const offset = Math.round(progress * distance);
 	const source = {
-		x: base.x,
-		y: base.y
+		x: sourceBase.x,
+		y: sourceBase.y
 	};
 	const target = {
-		x: base.x,
-		y: base.y
+		x: targetBase.x,
+		y: targetBase.y
 	};
 	switch (direction) {
 		case SlideDirection.Left:
@@ -32643,8 +32776,8 @@ function renderTransitionFrame(challenge, sourceCode, targetCode, transitionInde
 			target.y -= distance - offset;
 			break;
 	}
-	drawAsciiArtCode(rgba, sourceCode, source.x, source.y, MUTED, random$1);
-	drawAsciiArtCode(rgba, targetCode, target.x, target.y, TEXT, random$1);
+	drawAsciiArtRows(rgba, sourceArt, source.x, source.y, TEXT);
+	drawAsciiArtRows(rgba, targetArt, target.x, target.y, TEXT);
 	drawObstruction(rgba, random$1);
 	return {
 		width: FRAME_WIDTH,
@@ -32684,31 +32817,13 @@ function drawObstruction(rgba, random$1) {
 	}
 	for (let i = 0; i < 14; i++) fillRect(rgba, random$1.nextInt(FRAME_WIDTH), random$1.nextInt(FRAME_HEIGHT), 1 + random$1.nextInt(2), 8 + random$1.nextInt(16), DUST);
 }
-function drawAsciiArtCode(rgba, code, x, y, color, random$1) {
-	let cursorX = x;
-	for (const char of code) {
-		const glyph = BITMAP_FONT[char];
-		if (!glyph) {
-			cursorX += GLYPH_WIDTH * CELL_STRIDE_X + LETTER_GAP;
-			continue;
-		}
-		drawAsciiGlyph(rgba, glyph, cursorX, y, color, random$1);
-		cursorX += GLYPH_WIDTH * CELL_STRIDE_X + LETTER_GAP;
-	}
-}
-function drawAsciiGlyph(rgba, glyph, x, y, color, random$1) {
-	for (let row = 0; row < GLYPH_HEIGHT; row++) {
-		const bits = glyph[row];
-		for (let col = 0; col < GLYPH_WIDTH; col++) {
-			const cellX = x + col * CELL_STRIDE_X + random$1.nextInt(3) - 1;
-			const cellY = y + row * CELL_STRIDE_Y + random$1.nextInt(3) - 1;
-			if (bits[col] === "1") {
-				const symbol = INK_SYMBOLS[random$1.nextInt(INK_SYMBOLS.length)];
-				drawTinySymbol(rgba, symbol, cellX, cellY, color);
-			} else if (random$1.nextInt(9) === 0) {
-				const symbol = DUST_SYMBOLS[random$1.nextInt(DUST_SYMBOLS.length)];
-				drawTinySymbol(rgba, symbol, cellX, cellY, DUST);
-			}
+function drawAsciiArtRows(rgba, art, x, y, color) {
+	for (let row = 0; row < art.rows.length; row++) {
+		const symbols = art.rows[row];
+		for (let col = 0; col < symbols.length; col++) {
+			const symbol = symbols[col];
+			if (!symbol || symbol === " ") continue;
+			drawTinySymbol(rgba, symbol, x + col * ASCII_ART_CELL_ADVANCE_X, y + row * ASCII_ART_CELL_ADVANCE_Y, color);
 		}
 	}
 }
@@ -32720,10 +32835,10 @@ function drawTinySymbol(rgba, symbol, x, y, color) {
 		for (let col = 0; col < TINY_GLYPH_WIDTH; col++) if (bits[col] === "1") fillRect(rgba, x + col * TINY_SCALE, y + row * TINY_SCALE, TINY_SCALE, TINY_SCALE, color);
 	}
 }
-function centerPosition() {
+function centerPosition(art) {
 	return {
-		x: Math.round((FRAME_WIDTH - CODE_RENDER_WIDTH) / 2),
-		y: Math.round((FRAME_HEIGHT - CODE_RENDER_HEIGHT) / 2)
+		x: Math.round((FRAME_WIDTH - art.widthPx) / 2),
+		y: Math.round((FRAME_HEIGHT - art.heightPx) / 2)
 	};
 }
 function slideDirection(seed, transitionIndex) {

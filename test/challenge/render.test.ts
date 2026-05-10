@@ -1,12 +1,45 @@
-import { BITMAP_FONT } from '../../src/challenge/bitmap-font'
+import {
+  ASCII_ART_FONTS,
+  hasAsciiArtGlyph,
+  renderAsciiCodeArt,
+  selectAsciiArtFont
+} from '../../src/challenge/ascii-art-fonts'
 import { createChallenge } from '../../src/challenge/generate'
 import { CODE_HOLD_FRAMES, FRAME_HEIGHT, FRAME_WIDTH, renderChallengeFrames } from '../../src/challenge/render'
 import { ANIMATION_FRAMES, CHALLENGE_CHARSET, DECOY_COUNT } from '../../src/challenge/types'
 
 describe('challenge renderer', () => {
-  it('has glyphs for every challenge character', () => {
+  it('has ASCII-art glyphs for every challenge character across every font', () => {
     for (const char of CHALLENGE_CHARSET) {
-      expect(BITMAP_FONT[char], `missing glyph for ${char}`).toBeDefined()
+      expect(hasAsciiArtGlyph(char), `missing glyph for ${char}`).toBe(true)
+
+      for (const font of ASCII_ART_FONTS) {
+        const art = renderAsciiCodeArt(char, font)
+        expect(art.rows.join(''), `empty ${font.name} glyph for ${char}`).toMatch(/\S/)
+      }
+    }
+  })
+
+  it('selects deterministic varied ASCII-art fonts', () => {
+    const selected = Array.from({ length: 32 }, (_unused, index) =>
+      selectAsciiArtFont('font-variety-seed', index).name
+    )
+    const repeated = Array.from({ length: 32 }, (_unused, index) =>
+      selectAsciiArtFont('font-variety-seed', index).name
+    )
+
+    expect(selected).toEqual(repeated)
+    expect(new Set(selected).size).toBeGreaterThan(1)
+  })
+
+  it('keeps every ASCII-art font within the GIF frame', () => {
+    const code = CHALLENGE_CHARSET.slice(0, 5)
+
+    for (const font of ASCII_ART_FONTS) {
+      const art = renderAsciiCodeArt(code, font)
+
+      expect(art.widthPx, `${font.name} width`).toBeLessThanOrEqual(FRAME_WIDTH)
+      expect(art.heightPx, `${font.name} height`).toBeLessThanOrEqual(FRAME_HEIGHT)
     }
   })
 

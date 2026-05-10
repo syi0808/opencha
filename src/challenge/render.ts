@@ -1,4 +1,10 @@
-import { BITMAP_FONT, GLYPH_HEIGHT, GLYPH_WIDTH } from './bitmap-font'
+import {
+  ASCII_ART_CELL_ADVANCE_X,
+  ASCII_ART_CELL_ADVANCE_Y,
+  type AsciiCodeArt,
+  renderAsciiCodeArt,
+  selectAsciiArtFont
+} from './ascii-art-fonts'
 import { SeededRandom } from './random'
 import { type ChallengeDisplayModel } from './types'
 
@@ -23,30 +29,28 @@ const DUST = [211, 205, 196, 255] as const
 const TINY_ASCII_FONT: Record<string, readonly string[]> = {
   '#': ['111', '111', '111', '111', '111'],
   '@': ['111', '101', '101', '100', '111'],
+  '$': ['111', '110', '111', '011', '111'],
+  X: ['101', '101', '010', '101', '101'],
+  x: ['000', '101', '010', '101', '000'],
   '%': ['101', '001', '010', '100', '101'],
   '&': ['010', '101', '010', '101', '011'],
   '*': ['101', '010', '111', '010', '101'],
   '+': ['000', '010', '111', '010', '000'],
   '=': ['000', '111', '000', '111', '000'],
+  ':': ['000', '010', '000', '010', '000'],
+  ';': ['000', '010', '000', '010', '100'],
+  '.': ['000', '000', '000', '000', '010'],
+  '-': ['000', '000', '111', '000', '000'],
   '/': ['001', '001', '010', '100', '100'],
   '\\': ['100', '100', '010', '001', '001'],
   '|': ['010', '010', '010', '010', '010'],
   '_': ['000', '000', '000', '000', '111']
 }
 
-const INK_SYMBOLS = ['#', '@', '%', '&', '*', '+'] as const
 const DUST_SYMBOLS = ['+', '=', '/', '\\', '|', '_'] as const
 const TINY_SCALE = 2
 const TINY_GLYPH_WIDTH = 3
 const TINY_GLYPH_HEIGHT = 5
-const CELL_STRIDE_X = 7
-const CELL_STRIDE_Y = 9
-const LETTER_GAP = 8
-const CHALLENGE_CODE_LENGTH = 5
-const CODE_RENDER_WIDTH =
-  CHALLENGE_CODE_LENGTH * GLYPH_WIDTH * CELL_STRIDE_X +
-  (CHALLENGE_CODE_LENGTH - 1) * LETTER_GAP
-const CODE_RENDER_HEIGHT = GLYPH_HEIGHT * CELL_STRIDE_Y
 
 const enum SlideDirection {
   Left = 'left',
@@ -57,19 +61,22 @@ const enum SlideDirection {
 
 export function renderChallengeFrames(challenge: ChallengeDisplayModel): Frame[] {
   const frames: Frame[] = []
+  const codeArt = challenge.codes.map((code, codeIndex) =>
+    renderAsciiCodeArt(code, selectAsciiArtFont(challenge.seed, codeIndex))
+  )
 
   for (let codeIndex = 0; codeIndex < challenge.codes.length; codeIndex++) {
-    const code = challenge.codes[codeIndex] as string
+    const art = codeArt[codeIndex] as AsciiCodeArt
 
     for (let holdIndex = 0; holdIndex < CODE_HOLD_FRAMES; holdIndex++) {
-      frames.push(renderHoldFrame(challenge, code, codeIndex, holdIndex))
+      frames.push(renderHoldFrame(challenge, art, codeIndex, holdIndex))
     }
 
     if (codeIndex + 1 < challenge.codes.length) {
-      const nextCode = challenge.codes[codeIndex + 1] as string
+      const nextArt = codeArt[codeIndex + 1] as AsciiCodeArt
 
       for (let frameIndex = 0; frameIndex < challenge.params.animationFrames; frameIndex++) {
-        frames.push(renderTransitionFrame(challenge, code, nextCode, codeIndex, frameIndex))
+        frames.push(renderTransitionFrame(challenge, art, nextArt, codeIndex, frameIndex))
       }
     }
   }
@@ -79,7 +86,7 @@ export function renderChallengeFrames(challenge: ChallengeDisplayModel): Frame[]
 
 function renderHoldFrame(
   challenge: ChallengeDisplayModel,
-  code: string,
+  art: AsciiCodeArt,
   codeIndex: number,
   holdIndex: number
 ): Frame {
@@ -88,11 +95,11 @@ function renderHoldFrame(
   prepareCanvas(rgba, random)
 
   const pulse = Math.sin((holdIndex / CODE_HOLD_FRAMES) * Math.PI * 2)
-  const base = centerPosition()
+  const base = centerPosition(art)
   const x = base.x + Math.round(pulse * 2) + random.nextInt(3) - 1
   const y = base.y + random.nextInt(3) - 1
 
-  drawAsciiArtCode(rgba, code, x, y, TEXT, random)
+  drawAsciiArtRows(rgba, art, x, y, TEXT)
   drawObstruction(rgba, random)
 
   return {
@@ -105,8 +112,8 @@ function renderHoldFrame(
 
 function renderTransitionFrame(
   challenge: ChallengeDisplayModel,
-  sourceCode: string,
-  targetCode: string,
+  sourceArt: AsciiCodeArt,
+  targetArt: AsciiCodeArt,
   transitionIndex: number,
   frameIndex: number
 ): Frame {
@@ -116,14 +123,15 @@ function renderTransitionFrame(
 
   const progress = easeInOut(frameIndex / Math.max(1, challenge.params.animationFrames - 1))
   const direction = slideDirection(challenge.seed, transitionIndex)
-  const base = centerPosition()
+  const sourceBase = centerPosition(sourceArt)
+  const targetBase = centerPosition(targetArt)
   const distance =
     direction === SlideDirection.Left || direction === SlideDirection.Right
-      ? CODE_RENDER_WIDTH + 64
-      : CODE_RENDER_HEIGHT + 36
+      ? Math.max(sourceArt.widthPx, targetArt.widthPx) + 64
+      : Math.max(sourceArt.heightPx, targetArt.heightPx) + 36
   const offset = Math.round(progress * distance)
-  const source = { x: base.x, y: base.y }
-  const target = { x: base.x, y: base.y }
+  const source = { x: sourceBase.x, y: sourceBase.y }
+  const target = { x: targetBase.x, y: targetBase.y }
 
   switch (direction) {
     case SlideDirection.Left:
@@ -144,8 +152,8 @@ function renderTransitionFrame(
       break
   }
 
-  drawAsciiArtCode(rgba, sourceCode, source.x, source.y, MUTED, random)
-  drawAsciiArtCode(rgba, targetCode, target.x, target.y, TEXT, random)
+  drawAsciiArtRows(rgba, sourceArt, source.x, source.y, TEXT)
+  drawAsciiArtRows(rgba, targetArt, target.x, target.y, TEXT)
   drawObstruction(rgba, random)
 
   return {
@@ -227,50 +235,27 @@ function drawObstruction(rgba: Uint8Array, random: SeededRandom): void {
   }
 }
 
-function drawAsciiArtCode(
+function drawAsciiArtRows(
   rgba: Uint8Array,
-  code: string,
+  art: AsciiCodeArt,
   x: number,
   y: number,
-  color: readonly [number, number, number, number],
-  random: SeededRandom
+  color: readonly [number, number, number, number]
 ): void {
-  let cursorX = x
+  for (let row = 0; row < art.rows.length; row++) {
+    const symbols = art.rows[row] as string
 
-  for (const char of code) {
-    const glyph = BITMAP_FONT[char]
-    if (!glyph) {
-      cursorX += GLYPH_WIDTH * CELL_STRIDE_X + LETTER_GAP
-      continue
-    }
+    for (let col = 0; col < symbols.length; col++) {
+      const symbol = symbols[col]
+      if (!symbol || symbol === ' ') continue
 
-    drawAsciiGlyph(rgba, glyph, cursorX, y, color, random)
-    cursorX += GLYPH_WIDTH * CELL_STRIDE_X + LETTER_GAP
-  }
-}
-
-function drawAsciiGlyph(
-  rgba: Uint8Array,
-  glyph: readonly string[],
-  x: number,
-  y: number,
-  color: readonly [number, number, number, number],
-  random: SeededRandom
-): void {
-  for (let row = 0; row < GLYPH_HEIGHT; row++) {
-    const bits = glyph[row] as string
-
-    for (let col = 0; col < GLYPH_WIDTH; col++) {
-      const cellX = x + col * CELL_STRIDE_X + random.nextInt(3) - 1
-      const cellY = y + row * CELL_STRIDE_Y + random.nextInt(3) - 1
-
-      if (bits[col] === '1') {
-        const symbol = INK_SYMBOLS[random.nextInt(INK_SYMBOLS.length)] as string
-        drawTinySymbol(rgba, symbol, cellX, cellY, color)
-      } else if (random.nextInt(9) === 0) {
-        const symbol = DUST_SYMBOLS[random.nextInt(DUST_SYMBOLS.length)] as string
-        drawTinySymbol(rgba, symbol, cellX, cellY, DUST)
-      }
+      drawTinySymbol(
+        rgba,
+        symbol,
+        x + col * ASCII_ART_CELL_ADVANCE_X,
+        y + row * ASCII_ART_CELL_ADVANCE_Y,
+        color
+      )
     }
   }
 }
@@ -296,10 +281,10 @@ function drawTinySymbol(
   }
 }
 
-function centerPosition(): { x: number; y: number } {
+function centerPosition(art: AsciiCodeArt): { x: number; y: number } {
   return {
-    x: Math.round((FRAME_WIDTH - CODE_RENDER_WIDTH) / 2),
-    y: Math.round((FRAME_HEIGHT - CODE_RENDER_HEIGHT) / 2)
+    x: Math.round((FRAME_WIDTH - art.widthPx) / 2),
+    y: Math.round((FRAME_HEIGHT - art.heightPx) / 2)
   }
 }
 

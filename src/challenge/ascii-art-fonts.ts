@@ -13,20 +13,20 @@ const FONT_SIZE_PX = 44
 const FONT_TRACKING_PX = -1
 const MIXED_FONT_SIZE_VARIANTS = [36, 38, 40, 42, 44] as const
 const MIXED_ROTATION_DEGREES = [-7, -5, -3, 0, 3, 5, 7] as const
-const MIXED_JITTER_X_PX = [-3, -2, -1, 0, 1, 2, 3] as const
-const MIXED_JITTER_Y_PX = [-2, -1, 0, 1, 2] as const
-const MIXED_SCALE_X = [0.9, 0.95, 1, 1.05, 1.1] as const
-const MIXED_SCALE_Y = [0.92, 0.96, 1, 1.01, 1.02] as const
-const MIXED_SHEAR_X = [-0.16, -0.1, -0.05, 0, 0.05, 0.1, 0.16] as const
-const MIXED_OVERLAP_PX = [0, 2, 4, 6, 8] as const
-const MIXED_HOLE_COUNTS = [1, 1, 2, 2, 3] as const
+const MIXED_JITTER_X_PX = [-2, -1, 0, 1, 2] as const
+const MIXED_JITTER_Y_PX = [-1, 0, 1] as const
+const MIXED_SCALE_X = [0.95, 0.98, 1, 1.02, 1.05] as const
+const MIXED_SCALE_Y = [0.96, 0.98, 1, 1.01, 1.02] as const
+const MIXED_SHEAR_X = [-0.08, -0.04, 0, 0.04, 0.08] as const
+const MIXED_OVERLAP_PX = [0, 1, 2, 3] as const
+const MIXED_HOLE_COUNTS = [1, 1, 1, 2] as const
 const MIXED_TRACKING_PX = 4
 const MIN_ADVANCE_PX = 8
 const RASTER_PADDING_PX = 2
 const CURVE_SEGMENTS = 14
 const COVERAGE_THRESHOLD = 0.22
 const HOLE_MIN_VISIBLE_CELLS = 16
-const HOLE_MIN_VISIBLE_RATIO = 0.78
+const HOLE_MIN_VISIBLE_RATIO = 0.9
 const COVERAGE_SAMPLES = [
   [0.17, 0.17],
   [0.5, 0.17],
@@ -812,8 +812,8 @@ function applyAsciiOcclusionRows(
       if (visible.length <= minVisible) break
 
       const anchor = visible[random.nextInt(visible.length)] as Point
-      const holeWidth = 2 + random.nextInt(3)
-      const holeHeight = 1 + random.nextInt(2)
+      const holeWidth = 1 + random.nextInt(2)
+      const holeHeight = 1
       const x = clamp(anchor.x - random.nextInt(holeWidth), minCol, maxCol)
       const y = clamp(anchor.y - random.nextInt(holeHeight), minRow, maxRow)
 

@@ -44,7 +44,7 @@ export const DEFAULT_CONFIG: OpenchaConfig = {
   },
   assets: {
     branch: 'opencha-assets',
-    cleanupPassedAssets: true
+    cleanupPassedAssets: false
   },
   policy: {
     reverifyOnPush: false

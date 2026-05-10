@@ -54,7 +54,7 @@ describe('OpenCHA flows', () => {
     expect(gateway.latestCheck()?.conclusion).toBe('success')
     expect(gateway.comments.some((comment) => comment.body.includes('## ✅ OpenCHA passed'))).toBe(true)
     expect(gateway.minimizedNodeIds.size).toBeGreaterThanOrEqual(1)
-    expect(gateway.files.size).toBe(0)
+    expect(gateway.files.size).toBe(1)
   })
 
   it('blocks answer attempts while cooldown is active', async () => {

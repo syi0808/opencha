@@ -13,6 +13,7 @@ describe('OpenCHA config', () => {
     expect(parsed.config.challenge.codeCount).toBe(CODE_COUNT_DEFAULT)
     expect(parsed.config.challenge.maxAttempts).toBe(5)
     expect(parsed.config.assets.branch).toBe('opencha-assets')
+    expect(parsed.config.assets.cleanupPassedAssets).toBe(false)
   })
 
   it('parses configurable challenge code count', () => {

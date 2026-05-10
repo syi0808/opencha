@@ -70,7 +70,7 @@ challenge:
 
 assets:
   branch: opencha-assets
-  cleanup_passed_assets: true
+  cleanup_passed_assets: false
 
 policy:
   reverify_on_push: false
@@ -113,7 +113,7 @@ OpenCHA's MVP challenge is visual and is not accessible to all contributors. Mai
 
 OpenCHA is not a strong anti-bot or anti-OCR system. It is a small deliberate-effort gate for maintainers.
 
-Asset cleanup removes files from the asset branch tip when possible, but it does not rewrite git history.
+Set `assets.cleanup_passed_assets` to `true` only if you prefer removing challenge GIFs from the asset branch tip after pass/reset flows. Keeping the default `false` preserves historical challenge images in GitHub comments.
 
 ## Development
 

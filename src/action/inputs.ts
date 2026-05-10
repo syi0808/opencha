@@ -1,5 +1,4 @@
 import type * as core from '@actions/core'
-import { ConfigError } from '../errors'
 
 export interface ActionInputs {
   githubToken: string
@@ -13,12 +12,8 @@ export interface CoreInputApi {
 
 export function readActionInputs(coreApi: CoreInputApi): ActionInputs {
   const githubToken = coreApi.getInput('github-token', { required: true }).trim()
-  const openchaSecret = coreApi.getInput('opencha-secret', { required: true })
+  const openchaSecret = coreApi.getInput('opencha-secret', { required: true, trimWhitespace: false })
   coreApi.setSecret(openchaSecret)
-
-  if (openchaSecret.length < 32) {
-    throw new ConfigError('OpenCHA is not configured correctly: opencha-secret must be at least 32 characters.')
-  }
 
   return { githubToken, openchaSecret }
 }

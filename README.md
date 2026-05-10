@@ -45,11 +45,11 @@ jobs:
           opencha-secret: ${{ secrets.OPENCHA_SECRET }}
 ```
 
-Add a repository secret named `OPENCHA_SECRET`. Use a random string of at least 32 characters.
+Add a repository secret named `OPENCHA_SECRET`. OpenCHA does not restrict the character set or length, but a random value is recommended because it is used to derive encryption keys.
 
 ## Configuration
 
-OpenCHA reads `.github/opencha.yml` from the base repository branch, never from the pull request head branch. If the file is absent, defaults are used. Unknown fields warn and are ignored. Invalid values fail closed.
+OpenCHA reads `.github/opencha.yml` from the pull request base branch. If the file is absent, defaults are used. Unknown fields warn and are ignored. Invalid values fail closed.
 
 ```yaml
 trusted_users:
@@ -105,6 +105,8 @@ Trusted maintainers and collaborators can use:
 
 OpenCHA uses `pull_request_target` only for repository metadata and GitHub operations. It does not checkout or execute pull request code.
 
+OpenCHA also reads configuration from the pull request base branch, so an untrusted PR cannot change OpenCHA policy from the same PR.
+
 Challenge state is stored in encrypted PR comment payloads using AES-256-GCM with a key derived from `opencha-secret` using HKDF-SHA256. Challenge GIF URLs are public information. OpenCHA does not rely on hiding the image.
 
 ## Limitations
@@ -112,6 +114,8 @@ Challenge state is stored in encrypted PR comment payloads using AES-256-GCM wit
 OpenCHA's MVP challenge is visual and is not accessible to all contributors. Maintainers should provide a manual override path with `/opencha approve`.
 
 OpenCHA is not a strong anti-bot or anti-OCR system. It is a small deliberate-effort gate for maintainers.
+
+OpenCHA currently stores challenge GIFs by committing them to a dedicated repository branch. You can configure `assets.branch`, but other asset storage backends are not supported yet.
 
 Set `assets.cleanup_passed_assets` to `true` only if you prefer removing challenge GIFs from the asset branch tip after pass/reset flows. Keeping the default `false` preserves historical challenge images in GitHub comments.
 

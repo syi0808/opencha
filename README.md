@@ -77,7 +77,7 @@ policy:
 
 ## Challenge Flow
 
-The MVP challenge is a rasterized GIF. It renders each code with seed-stable ASCII-art font styles and slides from one code to the next without per-frame index markers or transition-only text color changes.
+The MVP challenge is a rasterized GIF. It renders five unique codes with a seed-stable randomized code length, dense ASCII-art font styles, and slides from one code to the next without per-frame index markers or transition-only text color changes.
 
 Untrusted PR authors reply to the challenge with:
 

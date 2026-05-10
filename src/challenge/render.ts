@@ -61,7 +61,7 @@ const TINY_ASCII_FONT: Record<string, readonly string[]> = {
 }
 
 const DUST_SYMBOLS = ['+', '=', '/', '\\', '|', '_'] as const
-const TINY_SCALE = 2
+const TINY_SCALE = 1
 const TINY_GLYPH_WIDTH = 3
 const TINY_GLYPH_HEIGHT = 5
 

@@ -1,10 +1,15 @@
 import { BITMAP_FONT, GLYPH_HEIGHT, GLYPH_WIDTH, type GlyphRows } from './bitmap-font'
 import { SeededRandom } from './random'
 
-export const ASCII_ART_CELL_ADVANCE_X = 5
-export const ASCII_ART_CELL_ADVANCE_Y = 10
-export const ASCII_ART_SYMBOL_WIDTH = 6
-export const ASCII_ART_SYMBOL_HEIGHT = 10
+const GLYPH_SCALE_X = 3
+const GLYPH_SCALE_Y = 2
+const EXPANDED_GLYPH_WIDTH = GLYPH_WIDTH * GLYPH_SCALE_X
+const EXPANDED_GLYPH_HEIGHT = GLYPH_HEIGHT * GLYPH_SCALE_Y
+
+export const ASCII_ART_CELL_ADVANCE_X = 3
+export const ASCII_ART_CELL_ADVANCE_Y = 6
+export const ASCII_ART_SYMBOL_WIDTH = 3
+export const ASCII_ART_SYMBOL_HEIGHT = 5
 
 export interface AsciiArtFont {
   name: string
@@ -19,6 +24,19 @@ export interface AsciiCodeArt {
   rowCount: number
   widthPx: number
   heightPx: number
+}
+
+interface ExpandedCellContext {
+  bit: boolean
+  row: number
+  col: number
+  subRow: number
+  subCol: number
+  expandedRow: number
+  expandedCol: number
+  edge: boolean
+  neighborCount: number
+  index: number
 }
 
 export const ASCII_ART_SYMBOL_PALETTE = [
@@ -93,7 +111,7 @@ export const ASCII_ART_FONTS: readonly AsciiArtFont[] = [
   },
   {
     name: 'poster-outline',
-    gapColumns: 3,
+    gapColumns: 2,
     renderGlyph: renderOutlineGlyph
   },
   {
@@ -136,12 +154,12 @@ export function selectAsciiArtFont(seed: string, codeIndex: number): AsciiArtFon
 export function renderAsciiCodeArt(code: string, font: AsciiArtFont): AsciiCodeArt {
   const glyphRows = [...code].map((char) => {
     const glyph = BITMAP_FONT[char]
-    return glyph ? font.renderGlyph(glyph) : blankGlyphRows(GLYPH_HEIGHT)
+    return glyph ? font.renderGlyph(glyph) : blankGlyphRows()
   })
   const rowCount = Math.max(0, ...glyphRows.map((rows) => rows.length))
   const rows = Array.from({ length: rowCount }, (_, row) =>
     glyphRows
-      .map((rows) => rows[row] ?? ''.padEnd(GLYPH_WIDTH * 2, ' '))
+      .map((rows) => rows[row] ?? ''.padEnd(EXPANDED_GLYPH_WIDTH, ' '))
       .join(' '.repeat(font.gapColumns))
   )
   const columns = Math.max(0, ...rows.map((row) => row.length))
@@ -163,168 +181,171 @@ export function hasAsciiArtGlyph(char: string): boolean {
 }
 
 function renderSolidGlyph(glyph: GlyphRows): string[] {
-  return glyph.map((bits, row) =>
-    bits
-      .split('')
-      .map((bit, col) => (bit === '1' ? samePair(denseSymbol(row + col)) : '  '))
-      .join('')
-  )
+  return renderExpandedGlyph(glyph, (cell) => {
+    if (!cell.bit) return ' '
+    return denseSymbol(cell.index + cell.subRow + cell.subCol)
+  })
 }
 
 function renderHatchGlyph(glyph: GlyphRows): string[] {
-  return glyph.map((bits, row) =>
-    bits
-      .split('')
-      .map((bit, col) => (bit === '1' ? samePair(hatchSymbol(row * 2 + col)) : '  '))
-      .join('')
-  )
+  return renderExpandedGlyph(glyph, (cell) => {
+    if (!cell.bit) return ' '
+    return hatchSymbol(cell.row * 13 + cell.col * 7 + cell.subRow * 3 + cell.subCol)
+  })
 }
 
 function renderOutlineGlyph(glyph: GlyphRows): string[] {
-  return glyph.map((bits, row) =>
-    bits
-      .split('')
-      .map((bit, col) => {
-        if (bit !== '1') return '  '
-        const edge = isEdgePixel(glyph, row, col)
-        return edge
-          ? symbolPair(
-              OUTLINE_SYMBOLS[(row + col) % OUTLINE_SYMBOLS.length] as string,
-              OUTLINE_SYMBOLS[(row * 2 + col + 1) % OUTLINE_SYMBOLS.length] as string
-            )
-          : '  '
-      })
-      .join('')
-  )
+  return renderExpandedGlyph(glyph, (cell) => {
+    if (!cell.bit) return ' '
+
+    const localEdge =
+      cell.edge ||
+      cell.subRow === 0 ||
+      cell.subRow === GLYPH_SCALE_Y - 1 ||
+      cell.subCol === 0 ||
+      cell.subCol === GLYPH_SCALE_X - 1
+
+    if (!localEdge && (cell.row + cell.col) % 3 === 0) {
+      return densitySymbol(cell.index)
+    }
+
+    return outlineSymbol(cell.index + cell.subRow * 2 + cell.subCol)
+  })
 }
 
 function renderShadowGlyph(glyph: GlyphRows): string[] {
-  return Array.from({ length: GLYPH_HEIGHT + 1 }, (_, row) =>
-    Array.from({ length: GLYPH_WIDTH }, (_unused, col) => {
-      if (glyph[row]?.[col] === '1') {
-        return samePair(denseSymbol(row + col))
-      }
+  return renderExpandedGlyph(glyph, (cell) => {
+    if (cell.bit) {
+      return denseSymbol(cell.index + cell.neighborCount)
+    }
 
-      if (row > 0 && glyph[row - 1]?.[Math.max(0, col - 1)] === '1') {
-        return '::'
-      }
+    if (hasExpandedBit(glyph, cell.expandedRow - 2, cell.expandedCol - 2)) {
+      return cell.index % 3 === 0 ? '~' : ':'
+    }
 
-      return '  '
-    }).join('')
-  )
+    return ' '
+  })
 }
 
 function renderDensityGlyph(glyph: GlyphRows): string[] {
-  return glyph.map((bits, row) =>
-    bits
-      .split('')
-      .map((bit, col) => {
-        const neighborCount = countOnNeighbors(glyph, row, col)
+  return renderExpandedGlyph(glyph, (cell) => {
+    if (cell.bit) {
+      return densitySymbol(cell.neighborCount * 5 + cell.row * 3 + cell.col + cell.subRow + cell.subCol)
+    }
 
-        if (bit === '1') {
-          return symbolPair(
-            densitySymbol(neighborCount * 2 + row + col),
-            densitySymbol(neighborCount * 3 + row * 2 + col + 1)
-          )
-        }
+    if (cell.neighborCount > 0 && (cell.expandedRow + cell.expandedCol) % 5 === 0) {
+      return fringeSymbol(cell.index)
+    }
 
-        if (neighborCount > 0 && (row + col) % 4 === 0) {
-          return symbolPair(fringeSymbol(row + col), ' ')
-        }
-
-        return '  '
-      })
-      .join('')
-  )
+    return ' '
+  })
 }
 
 function renderWireGlyph(glyph: GlyphRows): string[] {
-  return glyph.map((bits, row) =>
-    bits
-      .split('')
-      .map((bit, col) => {
-        if (bit !== '1') return '  '
+  return renderExpandedGlyph(glyph, (cell) => {
+    if (!cell.bit) return ' '
 
-        if (isEdgePixel(glyph, row, col)) {
-          return symbolPair(wireSymbol(glyph, row, col), weaveSymbol(row * 3 + col))
-        }
+    if (cell.edge || cell.subRow === 0 || cell.subCol === 1) {
+      return cell.subCol === 1 && !cell.edge
+        ? wireSymbol(glyph, cell.row, cell.col)
+        : weaveSymbol(cell.index)
+    }
 
-        return symbolPair('.', densitySymbol(row + col))
-      })
-      .join('')
-  )
+    return densitySymbol(cell.index + cell.neighborCount)
+  })
 }
 
 function renderSparkGlyph(glyph: GlyphRows): string[] {
-  return glyph.map((bits, row) =>
-    bits
-      .split('')
-      .map((bit, col) => {
-        const neighborCount = countOnNeighbors(glyph, row, col)
+  return renderExpandedGlyph(glyph, (cell) => {
+    if (cell.bit) {
+      return sparkSymbol(cell.index + cell.neighborCount + cell.subCol)
+    }
 
-        if (bit === '1') {
-          return symbolPair(
-            sparkSymbol(row * GLYPH_WIDTH + col + neighborCount),
-            sparkSymbol(row + col * 2 + neighborCount)
-          )
-        }
+    if (cell.neighborCount >= 3 && (cell.index + cell.subRow) % 7 === 0) {
+      return sparkSymbol(cell.index)
+    }
 
-        if (neighborCount >= 3 && (row * 2 + col) % 5 === 0) {
-          return symbolPair('.', ':')
-        }
-
-        return '  '
-      })
-      .join('')
-  )
+    return ' '
+  })
 }
 
 function renderAngleGlyph(glyph: GlyphRows): string[] {
-  return glyph.map((bits, row) =>
-    bits
-      .split('')
-      .map((bit, col) => {
-        const neighborCount = countOnNeighbors(glyph, row, col)
+  return renderExpandedGlyph(glyph, (cell) => {
+    if (cell.bit) {
+      if (cell.edge || (cell.subRow + cell.subCol) % 2 === 0) {
+        return shardSymbol(cell.index + cell.subRow * 2)
+      }
 
-        if (bit === '1') {
-          const left = isEdgePixel(glyph, row, col)
-            ? shardSymbol(row * 2 + col)
-            : densitySymbol(neighborCount + row + col)
-          return symbolPair(left, shardSymbol(neighborCount * 2 + row + col + 1))
-        }
+      return densitySymbol(cell.neighborCount + cell.index)
+    }
 
-        if (neighborCount > 1 && (row + col) % 5 === 0) {
-          return symbolPair(staticSymbol(row + col), ' ')
-        }
+    if (cell.neighborCount > 1 && (cell.expandedRow * 2 + cell.expandedCol) % 11 === 0) {
+      return staticSymbol(cell.index)
+    }
 
-        return '  '
-      })
-      .join('')
-  )
+    return ' '
+  })
 }
 
 function renderStaticGlyph(glyph: GlyphRows): string[] {
-  return glyph.map((bits, row) =>
-    bits
-      .split('')
-      .map((bit, col) => {
-        const neighborCount = countOnNeighbors(glyph, row, col)
+  return renderExpandedGlyph(glyph, (cell) => {
+    if (cell.bit) {
+      return cell.index % 4 === 0
+        ? staticSymbol(cell.index + cell.neighborCount)
+        : densitySymbol(cell.index + cell.neighborCount * 2)
+    }
 
-        if (bit === '1') {
-          return symbolPair(
-            staticSymbol(row * 3 + col + neighborCount),
-            densitySymbol(row + col * 2 + neighborCount)
-          )
-        }
+    if (cell.neighborCount >= 2 && (cell.expandedRow + cell.expandedCol * 3) % 6 === 0) {
+      return staticSymbol(cell.index + cell.neighborCount)
+    }
 
-        if (neighborCount >= 2 && (row * GLYPH_WIDTH + col) % 3 === 0) {
-          return symbolPair(staticSymbol(row + col), staticSymbol(row * 2 + col))
-        }
+    return ' '
+  })
+}
 
-        return '  '
+function renderExpandedGlyph(
+  glyph: GlyphRows,
+  renderCell: (cell: ExpandedCellContext) => string
+): string[] {
+  return Array.from({ length: EXPANDED_GLYPH_HEIGHT }, (_unused, expandedRow) => {
+    const row = Math.floor(expandedRow / GLYPH_SCALE_Y)
+    const subRow = expandedRow % GLYPH_SCALE_Y
+
+    return Array.from({ length: EXPANDED_GLYPH_WIDTH }, (_unusedCell, expandedCol) => {
+      const col = Math.floor(expandedCol / GLYPH_SCALE_X)
+      const subCol = expandedCol % GLYPH_SCALE_X
+      const bit = glyph[row]?.[col] === '1'
+      const cell = renderCell({
+        bit,
+        row,
+        col,
+        subRow,
+        subCol,
+        expandedRow,
+        expandedCol,
+        edge: bit && isEdgePixel(glyph, row, col),
+        neighborCount: countOnNeighbors(glyph, row, col),
+        index: expandedRow * EXPANDED_GLYPH_WIDTH + expandedCol
       })
-      .join('')
-  )
+
+      return cell[0] ?? ' '
+    }).join('')
+  })
+}
+
+function hasExpandedBit(glyph: GlyphRows, expandedRow: number, expandedCol: number): boolean {
+  if (
+    expandedRow < 0 ||
+    expandedRow >= EXPANDED_GLYPH_HEIGHT ||
+    expandedCol < 0 ||
+    expandedCol >= EXPANDED_GLYPH_WIDTH
+  ) {
+    return false
+  }
+
+  const row = Math.floor(expandedRow / GLYPH_SCALE_Y)
+  const col = Math.floor(expandedCol / GLYPH_SCALE_X)
+  return glyph[row]?.[col] === '1'
 }
 
 function isEdgePixel(glyph: GlyphRows, row: number, col: number): boolean {
@@ -353,28 +374,29 @@ function countOnNeighbors(glyph: GlyphRows, row: number, col: number): number {
   return count
 }
 
-function samePair(symbol: string): string {
-  return symbol + symbol
-}
-
-function symbolPair(left: string, right: string): string {
-  return left + right
+function pickSymbol(symbols: readonly string[], index: number): string {
+  const normalized = ((index % symbols.length) + symbols.length) % symbols.length
+  return symbols[normalized] ?? symbols[0] ?? '?'
 }
 
 function denseSymbol(index: number): string {
-  return DENSE_SYMBOLS[index % DENSE_SYMBOLS.length] as string
+  return pickSymbol(DENSE_SYMBOLS, index)
 }
 
 function hatchSymbol(index: number): string {
-  return HATCH_SYMBOLS[index % HATCH_SYMBOLS.length] as string
+  return pickSymbol(HATCH_SYMBOLS, index)
+}
+
+function outlineSymbol(index: number): string {
+  return pickSymbol(OUTLINE_SYMBOLS, index)
 }
 
 function densitySymbol(index: number): string {
-  return DENSITY_SYMBOLS[index % DENSITY_SYMBOLS.length] as string
+  return pickSymbol(DENSITY_SYMBOLS, index)
 }
 
 function weaveSymbol(index: number): string {
-  return WEAVE_SYMBOLS[index % WEAVE_SYMBOLS.length] as string
+  return pickSymbol(WEAVE_SYMBOLS, index)
 }
 
 function fringeSymbol(index: number): string {
@@ -382,15 +404,15 @@ function fringeSymbol(index: number): string {
 }
 
 function sparkSymbol(index: number): string {
-  return SPARK_SYMBOLS[index % SPARK_SYMBOLS.length] as string
+  return pickSymbol(SPARK_SYMBOLS, index)
 }
 
 function shardSymbol(index: number): string {
-  return SHARD_SYMBOLS[index % SHARD_SYMBOLS.length] as string
+  return pickSymbol(SHARD_SYMBOLS, index)
 }
 
 function staticSymbol(index: number): string {
-  return STATIC_SYMBOLS[index % STATIC_SYMBOLS.length] as string
+  return pickSymbol(STATIC_SYMBOLS, index)
 }
 
 function wireSymbol(glyph: GlyphRows, row: number, col: number): string {
@@ -405,6 +427,8 @@ function wireSymbol(glyph: GlyphRows, row: number, col: number): string {
   return weaveSymbol(row + col)
 }
 
-function blankGlyphRows(rowCount: number): string[] {
-  return Array.from({ length: rowCount }, () => ''.padEnd(GLYPH_WIDTH * 2, ' '))
+function blankGlyphRows(): string[] {
+  return Array.from({ length: EXPANDED_GLYPH_HEIGHT }, () =>
+    ''.padEnd(EXPANDED_GLYPH_WIDTH, ' ')
+  )
 }

@@ -3,12 +3,11 @@ import { createChallenge } from '../../src/challenge/generate'
 import {
   ANIMATION_FRAMES,
   CHALLENGE_CHARSET,
-  CHALLENGE_LENGTH,
   CHALLENGE_VERSION,
-  CODE_COUNT_MAX,
-  CODE_COUNT_MIN,
-  DECOY_COUNT_MAX,
-  DECOY_COUNT_MIN,
+  CODE_COUNT,
+  CODE_LENGTH_MAX,
+  CODE_LENGTH_MIN,
+  DECOY_COUNT,
   NOISE_LEVEL,
   TARGET_INDEX_MAX,
   TARGET_INDEX_MIN
@@ -29,33 +28,35 @@ describe('createChallenge', () => {
     expect(first.display.codes).not.toEqual(second.display.codes)
   })
 
-  it('uses only the allowed charset and unique fixed-length codes', () => {
+  it('uses only the allowed charset, fixed visible code count, and unique variable-length codes', () => {
     const challenge = createChallenge({ seed: 'charset-seed', answerSalt: 'salt' })
     const allowed = new RegExp(`^[${CHALLENGE_CHARSET}]+$`)
 
-    expect(challenge.display.codes.length).toBeGreaterThanOrEqual(CODE_COUNT_MIN)
-    expect(challenge.display.codes.length).toBeLessThanOrEqual(CODE_COUNT_MAX)
+    expect(challenge.display.codes).toHaveLength(CODE_COUNT)
     expect(new Set(challenge.display.codes).size).toBe(challenge.display.codes.length)
+    expect(challenge.payload.challengeParams.length).toBeGreaterThanOrEqual(CODE_LENGTH_MIN)
+    expect(challenge.payload.challengeParams.length).toBeLessThanOrEqual(CODE_LENGTH_MAX)
 
     for (const code of challenge.display.codes) {
-      expect(code).toHaveLength(CHALLENGE_LENGTH)
+      expect(code).toHaveLength(challenge.payload.challengeParams.length)
       expect(code).toMatch(allowed)
     }
   })
 
-  it('varies the number of visible codes by seed', () => {
-    const counts = new Set<number>()
+  it('keeps the visible code count fixed and varies code length by seed', () => {
+    const lengths = new Set<number>()
 
     for (let i = 0; i < 64; i++) {
-      const challenge = createChallenge({ seed: `count-seed-${i}`, answerSalt: 'salt' })
-      counts.add(challenge.display.codes.length)
+      const challenge = createChallenge({ seed: `length-seed-${i}`, answerSalt: 'salt' })
+      lengths.add(challenge.payload.challengeParams.length)
 
-      expect(challenge.display.codes.length).toBeGreaterThanOrEqual(CODE_COUNT_MIN)
-      expect(challenge.display.codes.length).toBeLessThanOrEqual(CODE_COUNT_MAX)
-      expect(challenge.payload.challengeParams.decoyCount).toBe(challenge.display.codes.length - 1)
+      expect(challenge.display.codes).toHaveLength(CODE_COUNT)
+      expect(challenge.payload.challengeParams.decoyCount).toBe(DECOY_COUNT)
+      expect(challenge.payload.challengeParams.length).toBeGreaterThanOrEqual(CODE_LENGTH_MIN)
+      expect(challenge.payload.challengeParams.length).toBeLessThanOrEqual(CODE_LENGTH_MAX)
     }
 
-    expect(counts.size).toBeGreaterThan(1)
+    expect(lengths.size).toBeGreaterThan(1)
   })
 
   it('sets target index, params, and answer hash payload fields', () => {
@@ -70,15 +71,13 @@ describe('createChallenge', () => {
       true
     )
     expect(challenge.payload.challengeParams).toEqual({
-      length: CHALLENGE_LENGTH,
-      decoyCount: challenge.display.codes.length - 1,
+      length: challenge.display.answer.length,
+      decoyCount: DECOY_COUNT,
       animationFrames: ANIMATION_FRAMES,
       charset: CHALLENGE_CHARSET,
       noiseLevel: NOISE_LEVEL,
       targetIndex: challenge.display.targetIndex
     })
-    expect(challenge.payload.challengeParams.decoyCount).toBeGreaterThanOrEqual(DECOY_COUNT_MIN)
-    expect(challenge.payload.challengeParams.decoyCount).toBeLessThanOrEqual(DECOY_COUNT_MAX)
     expect(challenge.payload.challengeVersion).toBe(CHALLENGE_VERSION)
   })
 })

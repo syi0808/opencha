@@ -1,21 +1,20 @@
 export const CHALLENGE_VERSION = 1
 export const CHALLENGE_CHARSET = 'ABCDEFGHJKLMNPQRTUVWXY346789'
-export const CHALLENGE_LENGTH = 5
-export const CODE_COUNT_MIN = 3
-export const CODE_COUNT_MAX = 7
-export const DECOY_COUNT_MIN = CODE_COUNT_MIN - 1
-export const DECOY_COUNT_MAX = CODE_COUNT_MAX - 1
+export const CODE_LENGTH_MIN = 4
+export const CODE_LENGTH_MAX = 7
+export const DECOY_COUNT = 4
+export const CODE_COUNT = DECOY_COUNT + 1
 export const ANIMATION_FRAMES = 16
 export const TARGET_INDEX_MIN = 2
-export const TARGET_INDEX_MAX = CODE_COUNT_MAX
+export const TARGET_INDEX_MAX = CODE_COUNT
 export const NOISE_LEVEL = 'medium'
 
 export type ChallengeVersion = typeof CHALLENGE_VERSION
 export type ChallengeNoiseLevel = typeof NOISE_LEVEL
 
 export interface ChallengeParams {
-  length: typeof CHALLENGE_LENGTH
-  decoyCount: number
+  length: number
+  decoyCount: typeof DECOY_COUNT
   animationFrames: typeof ANIMATION_FRAMES
   charset: typeof CHALLENGE_CHARSET
   noiseLevel: ChallengeNoiseLevel

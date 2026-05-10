@@ -1,15 +1,17 @@
 import { z } from 'zod'
 import {
-  CHALLENGE_LENGTH,
-  DECOY_COUNT_MAX,
-  DECOY_COUNT_MIN,
-  TARGET_INDEX_MAX,
+  CODE_LENGTH_MAX,
+  CODE_LENGTH_MIN,
   TARGET_INDEX_MIN
 } from '../challenge/types'
 import { ConfigError } from '../errors'
 
 export const PAYLOAD_SCHEMA_VERSION = 1
 export const PAYLOAD_PURPOSE = 'challenge-payload'
+
+const LEGACY_RANDOM_CODE_COUNT_DECOY_MIN = 2
+const LEGACY_RANDOM_CODE_COUNT_DECOY_MAX = 6
+const LEGACY_RANDOM_CODE_COUNT_TARGET_MAX = 7
 
 const isoDate = z.string().refine((value) => !Number.isNaN(Date.parse(value)), {
   message: 'Expected ISO timestamp'
@@ -21,12 +23,16 @@ export const challengePayloadSchema = z.object({
   challengeVersion: z.literal(1),
   seed: z.string().min(1),
   challengeParams: z.object({
-    length: z.literal(CHALLENGE_LENGTH),
-    decoyCount: z.number().int().min(DECOY_COUNT_MIN).max(DECOY_COUNT_MAX),
+    length: z.number().int().min(CODE_LENGTH_MIN).max(CODE_LENGTH_MAX),
+    decoyCount: z
+      .number()
+      .int()
+      .min(LEGACY_RANDOM_CODE_COUNT_DECOY_MIN)
+      .max(LEGACY_RANDOM_CODE_COUNT_DECOY_MAX),
     animationFrames: z.number().int().min(8).max(32),
     charset: z.string().min(1),
     noiseLevel: z.literal('medium'),
-    targetIndex: z.number().int().min(TARGET_INDEX_MIN).max(TARGET_INDEX_MAX)
+    targetIndex: z.number().int().min(TARGET_INDEX_MIN).max(LEGACY_RANDOM_CODE_COUNT_TARGET_MAX)
   }),
   answerSalt: z.string().min(1),
   answerHash: z.string().min(1),

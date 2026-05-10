@@ -4,10 +4,11 @@ import { SeededRandom } from './random'
 import {
   ANIMATION_FRAMES,
   CHALLENGE_CHARSET,
-  CHALLENGE_LENGTH,
   CHALLENGE_VERSION,
-  CODE_COUNT_MAX,
-  CODE_COUNT_MIN,
+  CODE_COUNT,
+  CODE_LENGTH_MAX,
+  CODE_LENGTH_MIN,
+  DECOY_COUNT,
   type ChallengeParams,
   type CreateChallengeOptions,
   type GeneratedChallenge,
@@ -19,13 +20,14 @@ export function createChallenge(options: CreateChallengeOptions = {}): Generated
   const seed = options.seed ?? randomBytes(16).toString('base64url')
   const answerSalt = options.answerSalt ?? randomBytes(16).toString('base64url')
   const random = new SeededRandom(seed)
-  const codeCount = CODE_COUNT_MIN + random.nextInt(CODE_COUNT_MAX - CODE_COUNT_MIN + 1)
-  const codes = generateUniqueCodes(random, codeCount)
+  const codeLength = CODE_LENGTH_MIN + random.nextInt(CODE_LENGTH_MAX - CODE_LENGTH_MIN + 1)
+  const codeCount = CODE_COUNT
+  const codes = generateUniqueCodes(random, codeCount, codeLength)
   const targetIndex = TARGET_INDEX_MIN + random.nextInt(codeCount - TARGET_INDEX_MIN + 1)
   const answer = codes[targetIndex - 1] as string
   const params: ChallengeParams = {
-    length: CHALLENGE_LENGTH,
-    decoyCount: codeCount - 1,
+    length: codeLength,
+    decoyCount: DECOY_COUNT,
     animationFrames: ANIMATION_FRAMES,
     charset: CHALLENGE_CHARSET,
     noiseLevel: NOISE_LEVEL,
@@ -51,20 +53,20 @@ export function createChallenge(options: CreateChallengeOptions = {}): Generated
   }
 }
 
-function generateUniqueCodes(random: SeededRandom, count: number): string[] {
+function generateUniqueCodes(random: SeededRandom, count: number, length: number): string[] {
   const codes = new Set<string>()
 
   while (codes.size < count) {
-    codes.add(generateCode(random))
+    codes.add(generateCode(random, length))
   }
 
   return [...codes]
 }
 
-function generateCode(random: SeededRandom): string {
+function generateCode(random: SeededRandom, length: number): string {
   let code = ''
 
-  for (let i = 0; i < CHALLENGE_LENGTH; i++) {
+  for (let i = 0; i < length; i++) {
     code += CHALLENGE_CHARSET[random.nextInt(CHALLENGE_CHARSET.length)]
   }
 

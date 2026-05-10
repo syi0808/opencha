@@ -13,7 +13,7 @@ import {
   hasTinyAsciiGlyph,
   renderChallengeFrames
 } from '../../src/challenge/render'
-import { ANIMATION_FRAMES, CHALLENGE_CHARSET } from '../../src/challenge/types'
+import { ANIMATION_FRAMES, CHALLENGE_CHARSET, CODE_LENGTH_MAX } from '../../src/challenge/types'
 
 describe('challenge renderer', () => {
   it('has ASCII-art glyphs for every challenge character across every font', () => {
@@ -51,7 +51,7 @@ describe('challenge renderer', () => {
     }
 
     for (const font of ASCII_ART_FONTS) {
-      const art = renderAsciiCodeArt('A3K9X', font)
+      const art = renderAsciiCodeArt('A3K9X7', font)
       const fontSymbols = new Set(art.rows.join('').replaceAll(' ', '').split(''))
 
       expect(fontSymbols.size, `${font.name} symbol count`).toBeGreaterThanOrEqual(4)
@@ -69,13 +69,26 @@ describe('challenge renderer', () => {
   })
 
   it('keeps every ASCII-art font within the GIF frame', () => {
-    const code = CHALLENGE_CHARSET.slice(0, 5)
+    const code = CHALLENGE_CHARSET.slice(0, CODE_LENGTH_MAX)
 
     for (const font of ASCII_ART_FONTS) {
       const art = renderAsciiCodeArt(code, font)
 
       expect(art.widthPx, `${font.name} width`).toBeLessThanOrEqual(FRAME_WIDTH)
       expect(art.heightPx, `${font.name} height`).toBeLessThanOrEqual(FRAME_HEIGHT)
+    }
+  })
+
+  it('renders dense multi-row ASCII art for the maximum code length', () => {
+    const code = CHALLENGE_CHARSET.slice(0, CODE_LENGTH_MAX)
+
+    for (const font of ASCII_ART_FONTS) {
+      const art = renderAsciiCodeArt(code, font)
+      const visibleSymbols = art.rows.join('').replaceAll(' ', '').length
+
+      expect(art.rowCount, `${font.name} rows`).toBeGreaterThanOrEqual(14)
+      expect(art.columns, `${font.name} columns`).toBeGreaterThanOrEqual(100)
+      expect(visibleSymbols, `${font.name} visible symbol density`).toBeGreaterThanOrEqual(120)
     }
   })
 

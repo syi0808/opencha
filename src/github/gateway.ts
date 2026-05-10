@@ -28,10 +28,6 @@ export interface CheckRunInput {
   summary: string
 }
 
-export interface WrittenFile {
-  downloadUrl: string | null
-}
-
 export interface GitHubGateway {
   getRepositoryPermission(owner: string, repo: string, username: string): Promise<RepositoryPermission>
   getPullRequest(owner: string, repo: string, prNumber: number): Promise<PullRequestInfo>
@@ -54,6 +50,6 @@ export interface GitHubGateway {
     path: string,
     bytes: Uint8Array,
     message: string
-  ): Promise<WrittenFile>
+  ): Promise<void>
   deleteFile(owner: string, repo: string, branch: string, path: string, message: string): Promise<void>
 }

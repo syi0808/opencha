@@ -275,7 +275,7 @@ export class OctokitGitHubGateway implements GitHubGateway {
     path: string,
     bytes: Uint8Array,
     message: string
-  ): Promise<{ downloadUrl: string | null }> {
+  ): Promise<void> {
     const existingSha = await this.getFileSha(owner, repo, branch, path)
     try {
       const params: Record<string, unknown> = {
@@ -287,8 +287,7 @@ export class OctokitGitHubGateway implements GitHubGateway {
         content: Buffer.from(bytes).toString('base64')
       }
       if (existingSha) params.sha = existingSha
-      const response = await this.octokit.rest.repos.createOrUpdateFileContents(params as never)
-      return { downloadUrl: response.data.content?.download_url ?? null }
+      await this.octokit.rest.repos.createOrUpdateFileContents(params as never)
     } catch (error) {
       throw normalizeError(error, `Failed to write file ${path}.`)
     }

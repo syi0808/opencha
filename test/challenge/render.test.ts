@@ -61,6 +61,7 @@ describe('challenge renderer', () => {
 
     const allSymbols = new Set<string>()
     const allowedSymbols = new Set<string>(ASCII_ART_SYMBOL_PALETTE)
+    const heavySymbols = new Set(['@', '$', '#'])
 
     for (const symbol of ASCII_ART_SYMBOL_PALETTE) {
       expect(hasTinyAsciiGlyph(symbol), `missing tiny renderer glyph for ${symbol}`).toBe(true)
@@ -71,6 +72,10 @@ describe('challenge renderer', () => {
       const fontSymbols = new Set(art.rows.join('').replaceAll(' ', '').split(''))
 
       expect(fontSymbols.size, `${font.name} symbol count`).toBeGreaterThanOrEqual(3)
+      expect(
+        [...fontSymbols].filter((symbol) => heavySymbols.has(symbol)).length,
+        `${font.name} heavy symbol count`
+      ).toBe(0)
 
       for (const symbol of fontSymbols) {
         const codePoint = symbol.charCodeAt(0)
@@ -82,6 +87,35 @@ describe('challenge renderer', () => {
     }
 
     expect(allSymbols.size).toBeGreaterThanOrEqual(6)
+  })
+
+  it('mixes fonts, sizes, and rotations within one seeded code', () => {
+    const font = ASCII_ART_FONTS[0]!
+    const options = { seed: 'mixed-character-seed', codeIndex: 2 }
+    const art = renderAsciiCodeArt('A3K9X7', font, options)
+    const repeated = renderAsciiCodeArt('A3K9X7', font, options)
+
+    expect(art.rows).toEqual(repeated.rows)
+    expect(art.characterStyles).toEqual(repeated.characterStyles)
+    expect(art.characterStyles.map((style) => style.char).join('')).toBe('A3K9X7')
+    expect(new Set(art.characterStyles.map((style) => style.fontName)).size).toBeGreaterThan(1)
+    expect(new Set(art.characterStyles.map((style) => style.fontSize)).size).toBeGreaterThan(1)
+    expect(new Set(art.characterStyles.map((style) => style.rotationDegrees)).size).toBeGreaterThan(1)
+    expect(
+      new Set(
+        art.characterStyles.map(
+          (style) => `${style.fontName}:${style.fontSize}:${style.rotationDegrees}`
+        )
+      ).size
+    ).toBe(art.characterStyles.length)
+
+    for (const style of art.characterStyles) {
+      expect(style.fontSize).toBeGreaterThanOrEqual(38)
+      expect(style.fontSize).toBeLessThanOrEqual(46)
+      expect(style.rotationDegrees).toBeGreaterThanOrEqual(-7)
+      expect(style.rotationDegrees).toBeLessThanOrEqual(7)
+      expect(style.advancePx).toBeGreaterThan(0)
+    }
   })
 
   it('reflects distinct TTF glyph outlines in the generated ASCII art', () => {
@@ -104,6 +138,13 @@ describe('challenge renderer', () => {
       expect(art.widthPx, `${font.name} width`).toBeLessThanOrEqual(FRAME_WIDTH)
       expect(art.heightPx, `${font.name} height`).toBeLessThanOrEqual(FRAME_HEIGHT)
     }
+
+    const mixedArt = renderAsciiCodeArt(code, ASCII_ART_FONTS[0]!, {
+      seed: 'mixed-frame-bounds-seed',
+      codeIndex: 0
+    })
+    expect(mixedArt.widthPx, 'mixed width').toBeLessThanOrEqual(FRAME_WIDTH)
+    expect(mixedArt.heightPx, 'mixed height').toBeLessThanOrEqual(FRAME_HEIGHT)
   })
 
   it('renders dense multi-row ASCII art for the maximum code length', () => {

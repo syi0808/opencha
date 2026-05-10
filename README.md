@@ -80,9 +80,9 @@ policy:
 
 ## Challenge Flow
 
-The MVP challenge is a rasterized GIF. It renders a configurable number of unique codes with independently randomized code lengths, bundled TTF fonts, dense ASCII text-art glyphs, and slides from one code to the next without per-frame index markers or transition-only text color changes.
+The MVP challenge is a rasterized GIF. It renders a configurable number of unique codes with independently randomized code lengths, bundled TTF fonts, lighter ASCII text-art glyphs, and slides from one code to the next without per-frame index markers or transition-only text color changes.
 
-OpenCHA bundles Noto Sans Bold, Noto Serif Bold, Anton, and Oswald Bold TTF files for local font rasterization. The challenge renderer converts the actual glyph outlines into ASCII density cells before drawing the GIF.
+OpenCHA bundles Noto Sans Bold, Noto Serif Bold, Anton, and Oswald Bold TTF files for local font rasterization. The challenge renderer converts actual glyph outlines into ASCII density cells, and each displayed code can mix per-character fonts, sizes, and small rotations before drawing the GIF.
 
 Untrusted PR authors reply to the challenge with:
 

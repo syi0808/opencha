@@ -75,7 +75,10 @@ const enum SlideDirection {
 export function renderChallengeFrames(challenge: ChallengeDisplayModel): Frame[] {
   const frames: Frame[] = []
   const codeArt = challenge.codes.map((code, codeIndex) =>
-    renderAsciiCodeArt(code, selectAsciiArtFont(challenge.seed, codeIndex))
+    renderAsciiCodeArt(code, selectAsciiArtFont(challenge.seed, codeIndex), {
+      seed: challenge.seed,
+      codeIndex
+    })
   )
 
   for (let codeIndex = 0; codeIndex < challenge.codes.length; codeIndex++) {

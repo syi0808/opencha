@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { hashAnswer } from './answer'
+import { hashAnswer, normalizeAnswer } from './answer'
 import { SeededRandom } from './random'
 import {
   ANIMATION_FRAMES,
@@ -53,22 +53,78 @@ export function createChallenge(options: CreateChallengeOptions = {}): Generated
 }
 
 function generateUniqueCodes(random: SeededRandom, count: number): string[] {
-  const codes = new Set<string>()
+  const codes = new Map<string, string>()
 
   while (codes.size < count) {
     const length = CODE_LENGTH_MIN + random.nextInt(CODE_LENGTH_MAX - CODE_LENGTH_MIN + 1)
-    codes.add(generateCode(random, length))
+    const code = generateCode(random, length)
+    codes.set(normalizeAnswer(code), code)
   }
 
-  return [...codes]
+  return [...codes.values()]
 }
 
 function generateCode(random: SeededRandom, length: number): string {
-  let code = ''
+  const chars: string[] = []
 
   for (let i = 0; i < length; i++) {
-    code += CHALLENGE_CHARSET[random.nextInt(CHALLENGE_CHARSET.length)]
+    chars.push(mixCase(CHALLENGE_CHARSET[random.nextInt(CHALLENGE_CHARSET.length)] as string, random))
   }
 
-  return code
+  enforceMixedLetterCase(chars, random)
+  return chars.join('')
+}
+
+function mixCase(symbol: string, random: SeededRandom): string {
+  if (!isUppercaseAsciiLetter(symbol)) return symbol
+  return random.nextInt(2) === 0 ? symbol.toLowerCase() : symbol
+}
+
+function enforceMixedLetterCase(chars: string[], random: SeededRandom): void {
+  while (letterIndexes(chars).length < 2) {
+    chars[random.nextInt(chars.length)] = randomLetter(random)
+  }
+
+  const letters = letterIndexes(chars)
+  if (!chars.some(isUppercaseAsciiLetter)) {
+    const index = letters[0] as number
+    chars[index] = chars[index]!.toUpperCase()
+  }
+
+  if (!chars.some(isLowercaseAsciiLetter)) {
+    const index = (letters.find((letterIndex) => letterIndex !== letters[0]) ?? letters[0]) as number
+    chars[index] = chars[index]!.toLowerCase()
+  }
+}
+
+function letterIndexes(chars: readonly string[]): number[] {
+  const indexes: number[] = []
+
+  for (let index = 0; index < chars.length; index++) {
+    if (isAsciiLetter(chars[index] as string)) indexes.push(index)
+  }
+
+  return indexes
+}
+
+function randomLetter(random: SeededRandom): string {
+  let symbol = CHALLENGE_CHARSET[random.nextInt(CHALLENGE_CHARSET.length)] as string
+
+  while (!isUppercaseAsciiLetter(symbol)) {
+    symbol = CHALLENGE_CHARSET[random.nextInt(CHALLENGE_CHARSET.length)] as string
+  }
+
+  return mixCase(symbol, random)
+}
+
+function isAsciiLetter(symbol: string): boolean {
+  return isUppercaseAsciiLetter(symbol) || isLowercaseAsciiLetter(symbol)
+}
+
+function isUppercaseAsciiLetter(symbol: string): boolean {
+  return symbol >= 'A' && symbol <= 'Z'
+}
+
+function isLowercaseAsciiLetter(symbol: string): boolean {
+  return symbol >= 'a' && symbol <= 'z'
 }

@@ -8,12 +8,26 @@ import { setCheckFailure } from '../checks'
 import type { OpenchaConfig } from '../config/defaults'
 import type { OpenchaEvent } from '../github/context'
 import type { GitHubGateway, IssueComment, PullRequestInfo } from '../github/gateway'
-import { ensureAndAddNeedsMaintainerLabel } from '../labels'
-import { renderChallengeComment, renderExceededComment, renderPassedChallengeComment } from '../state/comments'
+import {
+  ensureAndAddNeedsMaintainerLabel,
+  ensureAndAddReviewSignalLabel,
+  removeVerificationLabelsBestEffort
+} from '../labels'
+import {
+  renderChallengeComment,
+  renderExceededComment,
+  renderPassedChallengeComment,
+  renderReviewRequiredComment
+} from '../state/comments'
 import type { ChallengePayload } from '../state/payload'
 import { encryptPayload, loadChallengeState } from './state'
 import { cleanupStateBestEffort, failClosed, loadConfigForPr, startNewChallenge, trustForActor } from './pr-flow'
 import { completePass } from './pass-flow'
+
+const COMMENT_TRAILER_REPLIES = new Set([
+  ['im ', 'hu', 'man'].join(''),
+  ['im ', 'age', 'nt', '/', 'b', 'ot'].join('')
+])
 
 export interface CommentFlowInput {
   event: Extract<OpenchaEvent, { kind: 'comment' }>
@@ -80,6 +94,11 @@ async function handleAnswer(
     return
   }
 
+  if (isManualReviewReply(answer)) {
+    await handleManualReviewReply(input, pr, config, state.comment, state.payload)
+    return
+  }
+
   const now = new Date()
   if (state.payload.cooldownUntil && Date.parse(state.payload.cooldownUntil) > now.getTime()) {
     await updateChallengeComment(input, pr, state.comment, state.payload, now)
@@ -138,6 +157,43 @@ async function handleAnswer(
   }
 
   await hideCommentBestEffort(input.gateway, input.event.commentNodeId, input.report)
+}
+
+async function handleManualReviewReply(
+  input: CommentFlowInput,
+  pr: PullRequestInfo,
+  config: OpenchaConfig,
+  comment: IssueComment,
+  payload: ChallengePayload
+): Promise<void> {
+  const nextPayload: ChallengePayload = {
+    ...payload,
+    attempts: payload.maxAttempts,
+    cooldownUntil: null,
+    exceeded: true
+  }
+  const encrypted = encryptPayload(nextPayload, input.inputs, pr)
+  await input.gateway.updateIssueComment(
+    pr.baseOwner,
+    pr.baseRepo,
+    comment.id,
+    renderReviewRequiredComment(nextPayload, encrypted)
+  )
+  await removeVerificationLabelsBestEffort(
+    input.gateway,
+    config,
+    pr.baseOwner,
+    pr.baseRepo,
+    pr.number,
+    input.report
+  )
+  await ensureAndAddReviewSignalLabel(input.gateway, pr.baseOwner, pr.baseRepo, pr.number)
+  await setCheckFailure(input.gateway, pr, input.report, 'OpenCHA needs maintainer review')
+  await hideCommentBestEffort(input.gateway, input.event.commentNodeId, input.report)
+}
+
+function isManualReviewReply(answer: string): boolean {
+  return COMMENT_TRAILER_REPLIES.has(answer.trim().toLowerCase().replace(/\s+/g, ' '))
 }
 
 async function handleApprove(input: CommentFlowInput, pr: PullRequestInfo, config: OpenchaConfig): Promise<void> {

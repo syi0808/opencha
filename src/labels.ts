@@ -4,6 +4,8 @@ import type { GitHubGateway } from './github/gateway'
 
 const VERIFYING_COLOR = 'FFD866'
 const NEEDS_MAINTAINER_COLOR = 'D73A4A'
+const REVIEW_SIGNAL_COLOR = 'B60205'
+const REVIEW_SIGNAL_LABEL = 'opencha: agent suspected'
 
 export async function ensureAndAddVerifyingLabel(
   gateway: GitHubGateway,
@@ -25,6 +27,16 @@ export async function ensureAndAddNeedsMaintainerLabel(
 ): Promise<void> {
   await gateway.ensureLabel(owner, repo, config.labels.needsMaintainer, NEEDS_MAINTAINER_COLOR, 'OpenCHA needs maintainer attention')
   await gateway.addLabels(owner, repo, prNumber, [config.labels.needsMaintainer])
+}
+
+export async function ensureAndAddReviewSignalLabel(
+  gateway: GitHubGateway,
+  owner: string,
+  repo: string,
+  prNumber: number
+): Promise<void> {
+  await gateway.ensureLabel(owner, repo, REVIEW_SIGNAL_LABEL, REVIEW_SIGNAL_COLOR, 'OpenCHA needs maintainer review')
+  await gateway.addLabels(owner, repo, prNumber, [REVIEW_SIGNAL_LABEL])
 }
 
 export async function removeVerificationLabelsBestEffort(

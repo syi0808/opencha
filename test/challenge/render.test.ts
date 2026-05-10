@@ -1,6 +1,7 @@
 import { existsSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import {
+  ASCII_ART_CHARACTER_COLORS,
   ASCII_ART_FONTS,
   ASCII_ART_SYMBOL_PALETTE,
   hasAsciiArtGlyph,
@@ -28,7 +29,7 @@ describe('challenge renderer', () => {
   })
 
   it('has ASCII-art glyphs for every challenge character across every font', () => {
-    for (const char of CHALLENGE_CHARSET) {
+    for (const char of `${CHALLENGE_CHARSET}${CHALLENGE_CHARSET.toLowerCase()}`) {
       expect(hasAsciiArtGlyph(char), `missing glyph for ${char}`).toBe(true)
 
       for (const font of ASCII_ART_FONTS) {
@@ -135,6 +136,14 @@ describe('challenge renderer', () => {
       expect(style.holeCount).toBeGreaterThanOrEqual(1)
       expect(style.holeCount).toBeLessThanOrEqual(2)
       expect(style.advancePx).toBeGreaterThan(0)
+      expect(ASCII_ART_CHARACTER_COLORS.map(colorKey)).toContain(colorKey(style.color))
+      expect(contrastRatio(style.color, [240, 239, 234, 255])).toBeGreaterThanOrEqual(4.5)
+    }
+
+    expect(new Set(art.characterStyles.map((style) => colorKey(style.color))).size).toBeGreaterThan(1)
+    expect(art.characterCells).toHaveLength(art.rows.length)
+    for (const [rowIndex, cells] of art.characterCells.entries()) {
+      expect(cells, `character cell row ${rowIndex}`).toHaveLength(art.columns)
     }
   })
 
@@ -214,4 +223,45 @@ describe('challenge renderer', () => {
 
     expect(changed).toBeGreaterThan(100)
   })
+
+  it('draws seeded challenge text with multiple readable character colors', () => {
+    const challenge = createChallenge({ seed: 'frame-color-seed', answerSalt: 'salt' }).display
+    const [frame] = renderChallengeFrames(challenge)
+    if (!frame) throw new Error('expected at least one frame')
+
+    const textColorKeys = new Set(ASCII_ART_CHARACTER_COLORS.map(colorKey))
+    const seenTextColors = new Set<string>()
+
+    for (let index = 0; index < frame.rgba.length; index += 4) {
+      const key = `${frame.rgba[index]},${frame.rgba[index + 1]},${frame.rgba[index + 2]},${frame.rgba[index + 3]}`
+      if (textColorKeys.has(key)) seenTextColors.add(key)
+    }
+
+    expect(seenTextColors.size).toBeGreaterThan(1)
+  })
 })
+
+function colorKey(color: readonly [number, number, number, number]): string {
+  return color.join(',')
+}
+
+function contrastRatio(
+  foreground: readonly [number, number, number, number],
+  background: readonly [number, number, number, number]
+): number {
+  const foregroundLuminance = relativeLuminance(foreground)
+  const backgroundLuminance = relativeLuminance(background)
+  const lighter = Math.max(foregroundLuminance, backgroundLuminance)
+  const darker = Math.min(foregroundLuminance, backgroundLuminance)
+  return (lighter + 0.05) / (darker + 0.05)
+}
+
+function relativeLuminance(color: readonly [number, number, number, number]): number {
+  const [red, green, blue] = color
+  const [r, g, b] = [red, green, blue].map((channel) => {
+    const normalized = channel / 255
+    return normalized <= 0.03928 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4
+  }) as [number, number, number]
+
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b
+}

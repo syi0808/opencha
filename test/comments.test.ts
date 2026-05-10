@@ -31,6 +31,7 @@ describe('OpenCHA comments', () => {
     expect(body).toContain('<details>')
     expect(body).toContain('<kbd>/opencha approve</kbd>')
     expect(body).not.toContain(payload.answerHash)
+    expect(extractEncryptedPayload(body)).toBe('encrypted')
     expect(renderPassedChallengeComment({ ...payload, passed: true, passedBy: 'alice' }, 'encrypted')).toContain(
       'passed by @alice'
     )
@@ -40,6 +41,22 @@ describe('OpenCHA comments', () => {
     expect(renderExceededComment({ ...payload, exceeded: true, attempts: 5 }, 'encrypted')).toContain(
       '## 🚫 OpenCHA needs a maintainer'
     )
+  })
+
+  it('renders cooldown availability as an absolute UTC timestamp', () => {
+    const body = renderChallengeComment({
+      assetUrl: 'https://raw.githubusercontent.com/o/r/opencha-assets/pr-1/challenge-abc.gif',
+      targetIndex: 3,
+      payload: {
+        ...samplePayload(),
+        cooldownUntil: '2026-10-24T14:29:29.000Z'
+      },
+      encryptedPayload: 'encrypted',
+      now: new Date('2026-10-24T14:28:59.000Z')
+    })
+
+    expect(body).toContain('> Next attempt available at 2026-10-24 14:29:29 UTC.')
+    expect(body).not.toContain('Next attempt available in about')
   })
 })
 

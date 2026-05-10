@@ -1,6 +1,8 @@
 import {
   ASCII_ART_CELL_ADVANCE_X,
   ASCII_ART_CELL_ADVANCE_Y,
+  ASCII_ART_CHARACTER_COLORS,
+  type RgbaColor,
   type AsciiCodeArt,
   renderAsciiCodeArt,
   selectAsciiArtFont
@@ -21,7 +23,7 @@ export const FRAME_DELAY_MS = 90
 export const CODE_HOLD_FRAMES = 5
 
 const BACKGROUND = [240, 239, 234, 255] as const
-const TEXT = [41, 44, 48, 255] as const
+const TEXT = ASCII_ART_CHARACTER_COLORS[0] as RgbaColor
 const MUTED = [110, 116, 122, 255] as const
 const NOISE = [176, 170, 160, 255] as const
 const DUST = [211, 205, 196, 255] as const
@@ -260,14 +262,17 @@ function drawAsciiArtRows(
   art: AsciiCodeArt,
   x: number,
   y: number,
-  color: readonly [number, number, number, number]
+  fallbackColor: RgbaColor
 ): void {
   for (let row = 0; row < art.rows.length; row++) {
     const symbols = art.rows[row] as string
+    const characterCells = art.characterCells[row] ?? []
 
     for (let col = 0; col < symbols.length; col++) {
       const symbol = symbols[col]
       if (!symbol || symbol === ' ') continue
+      const characterIndex = characterCells[col] ?? -1
+      const color = art.characterStyles[characterIndex]?.color ?? fallbackColor
 
       drawTinySymbol(
         rgba,

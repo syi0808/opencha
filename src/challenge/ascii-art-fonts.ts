@@ -9,6 +9,8 @@ export const ASCII_ART_CELL_ADVANCE_Y = 6
 export const ASCII_ART_SYMBOL_WIDTH = 3
 export const ASCII_ART_SYMBOL_HEIGHT = 5
 
+export type RgbaColor = readonly [number, number, number, number]
+
 const FONT_SIZE_PX = 44
 const FONT_TRACKING_PX = -1
 const MIXED_FONT_SIZE_VARIANTS = [36, 38, 40, 42, 44] as const
@@ -27,6 +29,7 @@ const CURVE_SEGMENTS = 14
 const COVERAGE_THRESHOLD = 0.22
 const HOLE_MIN_VISIBLE_CELLS = 16
 const HOLE_MIN_VISIBLE_RATIO = 0.9
+const DEFAULT_CHARACTER_COLOR = [41, 44, 48, 255] as const satisfies RgbaColor
 const COVERAGE_SAMPLES = [
   [0.17, 0.17],
   [0.5, 0.17],
@@ -38,6 +41,16 @@ const COVERAGE_SAMPLES = [
   [0.5, 0.83],
   [0.83, 0.83]
 ] as const
+
+export const ASCII_ART_CHARACTER_COLORS = [
+  DEFAULT_CHARACTER_COLOR,
+  [72, 50, 112, 255],
+  [31, 84, 94, 255],
+  [118, 58, 43, 255],
+  [54, 87, 50, 255],
+  [39, 68, 132, 255],
+  [103, 48, 88, 255]
+] as const satisfies readonly RgbaColor[]
 
 export interface AsciiArtFont {
   name: string
@@ -65,12 +78,14 @@ export interface AsciiCharacterStyle {
   overlapPx: number
   holeCount: number
   advancePx: number
+  color: RgbaColor
 }
 
 export interface AsciiCodeArt {
   fontName: string
   characterStyles: AsciiCharacterStyle[]
   rows: string[]
+  characterCells: number[][]
   columns: number
   rowCount: number
   widthPx: number
@@ -108,6 +123,7 @@ interface CharacterRenderStyle {
   overlapPx: number
   holeCount: number
   tracking: number
+  color: RgbaColor
 }
 
 interface RenderedTextContours {
@@ -195,9 +211,13 @@ export function renderAsciiCodeArt(
   font: AsciiArtFont,
   options: RenderAsciiCodeArtOptions = {}
 ): AsciiCodeArt {
-  const { rows, characterStyles } = renderTtfAsciiRows(code, font, options)
+  const { rows, characterStyles, characterCells } = renderTtfAsciiRows(code, font, options)
   const columns = Math.max(0, ...rows.map((row) => row.length))
   const normalizedRows = rows.map((row) => row.padEnd(columns, ' '))
+  const normalizedCharacterCells = normalizedRows.map((_row, rowIndex) => {
+    const cells = characterCells[rowIndex] ?? []
+    return Array.from({ length: columns }, (_unused, colIndex) => cells[colIndex] ?? -1)
+  })
   const rowCount = normalizedRows.length
   const fontNames = new Set(characterStyles.map((style) => style.fontName))
 
@@ -205,6 +225,7 @@ export function renderAsciiCodeArt(
     fontName: fontNames.size === 1 ? (characterStyles[0]?.fontName ?? font.name) : 'mixed-character-ttf',
     characterStyles,
     rows: normalizedRows,
+    characterCells: normalizedCharacterCells,
     columns,
     rowCount,
     widthPx: columns > 0 ? (columns - 1) * ASCII_ART_CELL_ADVANCE_X + ASCII_ART_SYMBOL_WIDTH : 0,
@@ -221,11 +242,12 @@ function renderTtfAsciiRows(
   text: string,
   fontConfig: AsciiArtFont,
   options: RenderAsciiCodeArtOptions
-): { rows: string[]; characterStyles: AsciiCharacterStyle[] } {
+): { rows: string[]; characterStyles: AsciiCharacterStyle[]; characterCells: number[][] } {
   if (text.length === 0) {
     return {
       rows: [' '],
-      characterStyles: []
+      characterStyles: [],
+      characterCells: [[-1]]
     }
   }
 
@@ -233,7 +255,8 @@ function renderTtfAsciiRows(
   if (contours.length === 0) {
     return {
       rows: [' '],
-      characterStyles
+      characterStyles,
+      characterCells: [[-1]]
     }
   }
 
@@ -241,7 +264,8 @@ function renderTtfAsciiRows(
   if (segments.length === 0) {
     return {
       rows: [' '],
-      characterStyles
+      characterStyles,
+      characterCells: [[-1]]
     }
   }
 
@@ -262,10 +286,13 @@ function renderTtfAsciiRows(
   }
 
   const occludedRows = applyAsciiOcclusionRows(rows, bounds, characterBounds, characterStyles, text, options)
+  const characterCells = mapCharacterCells(occludedRows, bounds, characterBounds)
+  const cropped = cropAsciiRowsAndCells(occludedRows, characterCells)
 
   return {
-    rows: cropEmptyColumns(cropEmptyRows(occludedRows)),
-    characterStyles
+    rows: cropped.rows,
+    characterStyles,
+    characterCells: cropped.characterCells
   }
 }
 
@@ -342,7 +369,8 @@ function textToContours(
       shearX: roundToHundredth(style.shearX),
       overlapPx: style.overlapPx,
       holeCount: style.holeCount,
-      advancePx: roundToTenth(advancePx)
+      advancePx: roundToTenth(advancePx),
+      color: style.color
     })
     cursorX += advancePx
   }
@@ -375,7 +403,8 @@ function selectCharacterRenderStyles(
       shearX: 0,
       overlapPx: 0,
       holeCount: 0,
-      tracking: fallbackFontConfig.tracking
+      tracking: fallbackFontConfig.tracking,
+      color: DEFAULT_CHARACTER_COLOR
     }))
   }
 
@@ -425,6 +454,11 @@ function selectCharacterRenderStyles(
       MIXED_HOLE_COUNTS[
         (charIndex + random.nextInt(MIXED_HOLE_COUNTS.length)) % MIXED_HOLE_COUNTS.length
       ] ?? 1
+    const color =
+      ASCII_ART_CHARACTER_COLORS[
+        (charIndex + random.nextInt(ASCII_ART_CHARACTER_COLORS.length)) %
+          ASCII_ART_CHARACTER_COLORS.length
+      ] ?? DEFAULT_CHARACTER_COLOR
 
     return {
       char,
@@ -439,7 +473,8 @@ function selectCharacterRenderStyles(
       shearX,
       overlapPx,
       holeCount,
-      tracking: MIXED_TRACKING_PX
+      tracking: MIXED_TRACKING_PX,
+      color
     }
   })
 
@@ -477,6 +512,15 @@ function enforceMixedCharacterStyles(styles: CharacterRenderStyle[]): CharacterR
     adjusted[lastIndex] = {
       ...last,
       rotationDegrees: nextRotationDegrees(last.rotationDegrees)
+    }
+  }
+
+  if (new Set(adjusted.map((style) => colorKey(style.color))).size === 1) {
+    const lastIndex = adjusted.length - 1
+    const last = adjusted[lastIndex] as CharacterRenderStyle
+    adjusted[lastIndex] = {
+      ...last,
+      color: nextCharacterColor(last.color)
     }
   }
 
@@ -525,6 +569,10 @@ function characterStyleSignature(style: CharacterRenderStyle): string {
   return `${style.fontConfig.name}:${style.fontSize}:${style.rotationDegrees}`
 }
 
+function nextCharacterColor(color: RgbaColor): RgbaColor {
+  return ASCII_ART_CHARACTER_COLORS[(characterColorIndex(color) + 1) % ASCII_ART_CHARACTER_COLORS.length] ?? color
+}
+
 function nextAsciiArtFont(fontConfig: AsciiArtFont): AsciiArtFont {
   return ASCII_ART_FONTS[(asciiArtFontIndex(fontConfig) + 1) % ASCII_ART_FONTS.length] ?? fontConfig
 }
@@ -560,6 +608,17 @@ function rotationDegreesIndex(rotationDegrees: number): number {
     0,
     MIXED_ROTATION_DEGREES.findIndex((candidate) => candidate === rotationDegrees)
   )
+}
+
+function characterColorIndex(color: RgbaColor): number {
+  return Math.max(
+    0,
+    ASCII_ART_CHARACTER_COLORS.findIndex((candidate) => colorKey(candidate) === colorKey(color))
+  )
+}
+
+function colorKey(color: RgbaColor): string {
+  return color.join(',')
 }
 
 function transformContours(contours: readonly Point[][], style: CharacterRenderStyle): Point[][] {
@@ -880,6 +939,53 @@ function clearAsciiRect(
   }
 }
 
+function mapCharacterCells(
+  rows: readonly string[],
+  rasterBounds: Bounds,
+  characterBounds: readonly Bounds[]
+): number[][] {
+  const width = Math.max(0, ...rows.map((row) => row.length))
+
+  return rows.map((row, rowIndex) => {
+    const symbols = row.padEnd(width, ' ')
+
+    return Array.from({ length: width }, (_unused, colIndex) => {
+      if (symbols[colIndex] === ' ') return -1
+      return characterIndexForCell(rasterBounds, characterBounds, colIndex, rowIndex)
+    })
+  })
+}
+
+function characterIndexForCell(
+  rasterBounds: Bounds,
+  characterBounds: readonly Bounds[],
+  colIndex: number,
+  rowIndex: number
+): number {
+  const cellMinX = rasterBounds.minX + colIndex
+  const cellMinY = rasterBounds.minY + rowIndex
+  const cellMaxX = cellMinX + 1
+  const cellMaxY = cellMinY + 1
+  let bestIndex = -1
+  let bestArea = Number.POSITIVE_INFINITY
+
+  for (let index = 0; index < characterBounds.length; index++) {
+    const bounds = characterBounds[index]
+    if (!bounds || !hasFiniteBounds(bounds)) continue
+    if (cellMaxX < bounds.minX || cellMinX > bounds.maxX || cellMaxY < bounds.minY || cellMinY > bounds.maxY) {
+      continue
+    }
+
+    const area = (bounds.maxX - bounds.minX) * (bounds.maxY - bounds.minY)
+    if (area < bestArea) {
+      bestArea = area
+      bestIndex = index
+    }
+  }
+
+  return bestIndex
+}
+
 function hasFiniteBounds(bounds: Bounds): boolean {
   return (
     Number.isFinite(bounds.minX) &&
@@ -893,21 +999,29 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
 }
 
-function cropEmptyRows(rows: readonly string[]): string[] {
+function cropAsciiRowsAndCells(
+  rows: readonly string[],
+  characterCells: readonly (readonly number[])[]
+): { rows: string[]; characterCells: number[][] } {
   let top = 0
   while (top < rows.length && rows[top]?.trim() === '') top += 1
 
   let bottom = rows.length
   while (bottom > top && rows[bottom - 1]?.trim() === '') bottom -= 1
 
-  return top < bottom ? rows.slice(top, bottom) : [' ']
-}
+  if (top >= bottom) {
+    return {
+      rows: [' '],
+      characterCells: [[-1]]
+    }
+  }
 
-function cropEmptyColumns(rows: readonly string[]): string[] {
+  const rowCroppedRows = rows.slice(top, bottom)
+  const rowCroppedCells = characterCells.slice(top, bottom)
   let left = Number.POSITIVE_INFINITY
   let right = 0
 
-  for (const row of rows) {
+  for (const row of rowCroppedRows) {
     const first = row.search(/\S/)
     if (first === -1) continue
 
@@ -915,6 +1029,15 @@ function cropEmptyColumns(rows: readonly string[]): string[] {
     right = Math.max(right, row.search(/\s*$/))
   }
 
-  if (!Number.isFinite(left) || right <= left) return [' ']
-  return rows.map((row) => row.slice(left, right))
+  if (!Number.isFinite(left) || right <= left) {
+    return {
+      rows: [' '],
+      characterCells: [[-1]]
+    }
+  }
+
+  return {
+    rows: rowCroppedRows.map((row) => row.slice(left, right)),
+    characterCells: rowCroppedCells.map((row) => row.slice(left, right))
+  }
 }

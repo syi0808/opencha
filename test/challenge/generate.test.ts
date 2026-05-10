@@ -1,4 +1,4 @@
-import { verifyAnswer } from '../../src/challenge/answer'
+import { normalizeAnswer, verifyAnswer } from '../../src/challenge/answer'
 import { createChallenge } from '../../src/challenge/generate'
 import {
   ANIMATION_FRAMES,
@@ -29,12 +29,13 @@ describe('createChallenge', () => {
     expect(first.display.codes).not.toEqual(second.display.codes)
   })
 
-  it('uses only the allowed charset, default code count, and unique per-code lengths', () => {
+  it('uses the allowed mixed-case charset, default code count, and unique per-code lengths', () => {
     const challenge = createChallenge({ seed: 'charset-seed', answerSalt: 'salt' })
-    const allowed = new RegExp(`^[${CHALLENGE_CHARSET}]+$`)
+    const allowed = new RegExp(`^[${CHALLENGE_CHARSET}${CHALLENGE_CHARSET.toLowerCase()}]+$`)
 
     expect(challenge.display.codes).toHaveLength(CODE_COUNT_DEFAULT)
     expect(new Set(challenge.display.codes).size).toBe(challenge.display.codes.length)
+    expect(new Set(challenge.display.codes.map(normalizeAnswer)).size).toBe(challenge.display.codes.length)
     expect(challenge.payload.challengeParams.codeCount).toBe(CODE_COUNT_DEFAULT)
     expect(challenge.payload.challengeParams.codeLengths).toEqual(
       challenge.display.codes.map((code) => code.length)
@@ -44,6 +45,8 @@ describe('createChallenge', () => {
       expect(code.length).toBeGreaterThanOrEqual(CODE_LENGTH_MIN)
       expect(code.length).toBeLessThanOrEqual(CODE_LENGTH_MAX)
       expect(code).toMatch(allowed)
+      expect(code).toMatch(/[A-Z]/)
+      expect(code).toMatch(/[a-z]/)
     }
   })
 

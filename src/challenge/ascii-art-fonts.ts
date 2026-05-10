@@ -1,20 +1,36 @@
-import { BITMAP_FONT, GLYPH_HEIGHT, GLYPH_WIDTH, type GlyphRows } from './bitmap-font'
+import { existsSync, readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import opentype, { type Font, type PathCommand } from 'opentype.js'
 import { SeededRandom } from './random'
-
-const GLYPH_SCALE_X = 6
-const GLYPH_SCALE_Y = 4
-const EXPANDED_GLYPH_WIDTH = GLYPH_WIDTH * GLYPH_SCALE_X
-const EXPANDED_GLYPH_HEIGHT = GLYPH_HEIGHT * GLYPH_SCALE_Y
 
 export const ASCII_ART_CELL_ADVANCE_X = 3
 export const ASCII_ART_CELL_ADVANCE_Y = 6
 export const ASCII_ART_SYMBOL_WIDTH = 3
 export const ASCII_ART_SYMBOL_HEIGHT = 5
 
+const FONT_SIZE_PX = 44
+const FONT_TRACKING_PX = -1
+const RASTER_PADDING_PX = 2
+const CURVE_SEGMENTS = 14
+const COVERAGE_SAMPLES = [
+  [0.17, 0.17],
+  [0.5, 0.17],
+  [0.83, 0.17],
+  [0.17, 0.5],
+  [0.5, 0.5],
+  [0.83, 0.5],
+  [0.17, 0.83],
+  [0.5, 0.83],
+  [0.83, 0.83]
+] as const
+
 export interface AsciiArtFont {
   name: string
-  gapColumns: number
-  renderGlyph: (glyph: GlyphRows) => string[]
+  family: string
+  filename: string
+  fontSize: number
+  tracking: number
 }
 
 export interface AsciiCodeArt {
@@ -26,17 +42,21 @@ export interface AsciiCodeArt {
   heightPx: number
 }
 
-interface ExpandedCellContext {
-  bit: boolean
-  row: number
-  col: number
-  subRow: number
-  subCol: number
-  expandedRow: number
-  expandedCol: number
-  edge: boolean
-  neighborCount: number
-  index: number
+interface Point {
+  x: number
+  y: number
+}
+
+interface Segment {
+  a: Point
+  b: Point
+}
+
+interface Bounds {
+  minX: number
+  minY: number
+  maxX: number
+  maxY: number
 }
 
 export const ASCII_ART_SYMBOL_PALETTE = [
@@ -73,78 +93,40 @@ export const ASCII_ART_SYMBOL_PALETTE = [
   'X'
 ] as const
 
-const DENSE_SYMBOLS = ['@', '#', '$', '%', '&', 'X'] as const
-const HATCH_SYMBOLS = ['/', '\\', '|', 'x', 'X', '=', '+', '-'] as const
-const OUTLINE_SYMBOLS = ['#', '+', '%', '&', '[', ']', '{', '}'] as const
-const DENSITY_SYMBOLS = [
-  '.',
-  ',',
-  ':',
-  ';',
-  '-',
-  '=',
-  '+',
-  '*',
-  'x',
-  'X',
-  '%',
-  '&',
-  '$',
-  '#',
-  '@'
-] as const
-const WEAVE_SYMBOLS = ['|', '/', '\\', '-', '=', '+', 'x', 'X', '<', '>', '^', '~'] as const
-const SPARK_SYMBOLS = ['.', ',', ':', ';', '!', '?', '*', '+', 'x', 'X', '%', '#', '@'] as const
-const SHARD_SYMBOLS = ['<', '>', '^', '~', '/', '\\', '[', ']', '{', '}', '(', ')'] as const
-const STATIC_SYMBOLS = ['.', ',', ':', ';', '!', '?', '*', '+', '=', '-', '_'] as const
+const DENSITY_RAMP = [' ', '.', ':', ';', '+', '=', 'x', 'X', '$', '@'] as const
 
 export const ASCII_ART_FONTS: readonly AsciiArtFont[] = [
   {
-    name: 'solid-block',
-    gapColumns: 2,
-    renderGlyph: renderSolidGlyph
+    name: 'noto-sans-bold',
+    family: 'Noto Sans Bold',
+    filename: 'NotoSans-Bold.ttf',
+    fontSize: FONT_SIZE_PX,
+    tracking: FONT_TRACKING_PX
   },
   {
-    name: 'scanline-hatch',
-    gapColumns: 2,
-    renderGlyph: renderHatchGlyph
+    name: 'noto-serif-bold',
+    family: 'Noto Serif Bold',
+    filename: 'NotoSerif-Bold.ttf',
+    fontSize: FONT_SIZE_PX,
+    tracking: FONT_TRACKING_PX
   },
   {
-    name: 'poster-outline',
-    gapColumns: 2,
-    renderGlyph: renderOutlineGlyph
+    name: 'anton-regular',
+    family: 'Anton',
+    filename: 'Anton-Regular.ttf',
+    fontSize: FONT_SIZE_PX,
+    tracking: FONT_TRACKING_PX
   },
   {
-    name: 'drop-shadow',
-    gapColumns: 2,
-    renderGlyph: renderShadowGlyph
-  },
-  {
-    name: 'density-ramp',
-    gapColumns: 2,
-    renderGlyph: renderDensityGlyph
-  },
-  {
-    name: 'wire-weave',
-    gapColumns: 2,
-    renderGlyph: renderWireGlyph
-  },
-  {
-    name: 'spark-noise',
-    gapColumns: 2,
-    renderGlyph: renderSparkGlyph
-  },
-  {
-    name: 'angle-shards',
-    gapColumns: 2,
-    renderGlyph: renderAngleGlyph
-  },
-  {
-    name: 'signal-static',
-    gapColumns: 2,
-    renderGlyph: renderStaticGlyph
+    name: 'oswald-bold',
+    family: 'Oswald Bold',
+    filename: 'Oswald-Bold.ttf',
+    fontSize: FONT_SIZE_PX,
+    tracking: FONT_TRACKING_PX
   }
 ]
+
+const fontCache = new Map<string, Font>()
 
 export function selectAsciiArtFont(seed: string, codeIndex: number): AsciiArtFont {
   const random = new SeededRandom(`${seed}:ascii-art-font:${codeIndex}`)
@@ -152,18 +134,10 @@ export function selectAsciiArtFont(seed: string, codeIndex: number): AsciiArtFon
 }
 
 export function renderAsciiCodeArt(code: string, font: AsciiArtFont): AsciiCodeArt {
-  const glyphRows = [...code].map((char) => {
-    const glyph = BITMAP_FONT[char]
-    return glyph ? font.renderGlyph(glyph) : blankGlyphRows()
-  })
-  const rowCount = Math.max(0, ...glyphRows.map((rows) => rows.length))
-  const rows = Array.from({ length: rowCount }, (_, row) =>
-    glyphRows
-      .map((rows) => rows[row] ?? ''.padEnd(EXPANDED_GLYPH_WIDTH, ' '))
-      .join(' '.repeat(font.gapColumns))
-  )
+  const rows = renderTtfAsciiRows(code, font)
   const columns = Math.max(0, ...rows.map((row) => row.length))
   const normalizedRows = rows.map((row) => row.padEnd(columns, ' '))
+  const rowCount = normalizedRows.length
 
   return {
     fontName: font.name,
@@ -177,258 +151,263 @@ export function renderAsciiCodeArt(code: string, font: AsciiArtFont): AsciiCodeA
 }
 
 export function hasAsciiArtGlyph(char: string): boolean {
-  return BITMAP_FONT[char] !== undefined
+  return ASCII_ART_FONTS.some((font) => loadFont(font).charToGlyph(char).advanceWidth > 0)
 }
 
-function renderSolidGlyph(glyph: GlyphRows): string[] {
-  return renderExpandedGlyph(glyph, (cell) => {
-    if (!cell.bit) return ' '
-    return denseSymbol(cell.index + cell.subRow + cell.subCol)
-  })
+function renderTtfAsciiRows(text: string, fontConfig: AsciiArtFont): string[] {
+  if (text.length === 0) return [' ']
+
+  const font = loadFont(fontConfig)
+  const contours = textToContours(text, font, fontConfig)
+  if (contours.length === 0) return [' ']
+
+  const segments = contoursToSegments(contours)
+  if (segments.length === 0) return [' ']
+
+  const bounds = padBounds(boundsForContours(contours), RASTER_PADDING_PX)
+  const width = Math.max(1, Math.ceil(bounds.maxX - bounds.minX))
+  const height = Math.max(1, Math.ceil(bounds.maxY - bounds.minY))
+  const rows: string[] = []
+
+  for (let y = 0; y < height; y++) {
+    let row = ''
+
+    for (let x = 0; x < width; x++) {
+      const coverage = cellCoverage(bounds.minX + x, bounds.minY + y, segments)
+      row += densitySymbol(coverage)
+    }
+
+    rows.push(row)
+  }
+
+  return cropEmptyColumns(cropEmptyRows(rows))
 }
 
-function renderHatchGlyph(glyph: GlyphRows): string[] {
-  return renderExpandedGlyph(glyph, (cell) => {
-    if (!cell.bit) return ' '
-    return hatchSymbol(cell.row * 13 + cell.col * 7 + cell.subRow * 3 + cell.subCol)
-  })
+function loadFont(fontConfig: AsciiArtFont): Font {
+  const cached = fontCache.get(fontConfig.filename)
+  if (cached) return cached
+
+  const bytes = readFileSync(resolveFontPath(fontConfig.filename))
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
+  const font = opentype.parse(buffer)
+  fontCache.set(fontConfig.filename, font)
+  return font
 }
 
-function renderOutlineGlyph(glyph: GlyphRows): string[] {
-  return renderExpandedGlyph(glyph, (cell) => {
-    if (!cell.bit) return ' '
+function resolveFontPath(filename: string): string {
+  const moduleDir = dirname(fileURLToPath(import.meta.url))
+  const candidates = [
+    join(moduleDir, 'fonts', filename),
+    join(moduleDir, '..', 'src', 'challenge', 'fonts', filename),
+    join(process.env.GITHUB_ACTION_PATH ?? process.cwd(), 'src', 'challenge', 'fonts', filename)
+  ]
 
-    const localEdge =
-      cell.edge ||
-      cell.subRow === 0 ||
-      cell.subRow === GLYPH_SCALE_Y - 1 ||
-      cell.subCol === 0 ||
-      cell.subCol === GLYPH_SCALE_X - 1
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate
+  }
 
-    if (!localEdge && (cell.row + cell.col) % 3 === 0) {
-      return densitySymbol(cell.index)
-    }
-
-    return outlineSymbol(cell.index + cell.subRow * 2 + cell.subCol)
-  })
+  return candidates[0] as string
 }
 
-function renderShadowGlyph(glyph: GlyphRows): string[] {
-  return renderExpandedGlyph(glyph, (cell) => {
-    if (cell.bit) {
-      return denseSymbol(cell.index + cell.neighborCount)
-    }
+function textToContours(text: string, font: Font, fontConfig: AsciiArtFont): Point[][] {
+  const scale = fontConfig.fontSize / font.unitsPerEm
+  const baseline = Math.ceil(font.ascender * scale) + RASTER_PADDING_PX
+  const contours: Point[][] = []
+  let cursorX = RASTER_PADDING_PX
 
-    if (hasExpandedBit(glyph, cell.expandedRow - 2, cell.expandedCol - 2)) {
-      return cell.index % 3 === 0 ? '~' : ':'
-    }
+  for (const char of text) {
+    const glyph = font.charToGlyph(char)
+    const path = glyph.getPath(cursorX, baseline, fontConfig.fontSize)
+    contours.push(...flattenPath(path.commands))
+    cursorX += glyph.advanceWidth * scale + fontConfig.tracking
+  }
 
-    return ' '
-  })
+  return contours.filter((contour) => contour.length > 2)
 }
 
-function renderDensityGlyph(glyph: GlyphRows): string[] {
-  return renderExpandedGlyph(glyph, (cell) => {
-    if (cell.bit) {
-      return densitySymbol(cell.neighborCount * 5 + cell.row * 3 + cell.col + cell.subRow + cell.subCol)
-    }
+function flattenPath(commands: readonly PathCommand[]): Point[][] {
+  const contours: Point[][] = []
+  let current: Point[] = []
+  let cursor: Point | null = null
+  let contourStart: Point | null = null
 
-    if (cell.neighborCount > 0 && (cell.expandedRow + cell.expandedCol) % 5 === 0) {
-      return fringeSymbol(cell.index)
-    }
-
-    return ' '
-  })
-}
-
-function renderWireGlyph(glyph: GlyphRows): string[] {
-  return renderExpandedGlyph(glyph, (cell) => {
-    if (!cell.bit) return ' '
-
-    if (cell.edge || cell.subRow === 0 || cell.subCol === 1) {
-      return cell.subCol === 1 && !cell.edge
-        ? wireSymbol(glyph, cell.row, cell.col)
-        : weaveSymbol(cell.index)
-    }
-
-    return densitySymbol(cell.index + cell.neighborCount)
-  })
-}
-
-function renderSparkGlyph(glyph: GlyphRows): string[] {
-  return renderExpandedGlyph(glyph, (cell) => {
-    if (cell.bit) {
-      return sparkSymbol(cell.index + cell.neighborCount + cell.subCol)
-    }
-
-    if (cell.neighborCount >= 3 && (cell.index + cell.subRow) % 7 === 0) {
-      return sparkSymbol(cell.index)
-    }
-
-    return ' '
-  })
-}
-
-function renderAngleGlyph(glyph: GlyphRows): string[] {
-  return renderExpandedGlyph(glyph, (cell) => {
-    if (cell.bit) {
-      if (cell.edge || (cell.subRow + cell.subCol) % 2 === 0) {
-        return shardSymbol(cell.index + cell.subRow * 2)
+  for (const command of commands) {
+    switch (command.type) {
+      case 'M':
+        if (current.length > 1) contours.push(current)
+        cursor = { x: command.x, y: command.y }
+        contourStart = cursor
+        current = [cursor]
+        break
+      case 'L': {
+        const next = { x: command.x, y: command.y }
+        current.push(next)
+        cursor = next
+        break
       }
-
-      return densitySymbol(cell.neighborCount + cell.index)
-    }
-
-    if (cell.neighborCount > 1 && (cell.expandedRow * 2 + cell.expandedCol) % 11 === 0) {
-      return staticSymbol(cell.index)
-    }
-
-    return ' '
-  })
-}
-
-function renderStaticGlyph(glyph: GlyphRows): string[] {
-  return renderExpandedGlyph(glyph, (cell) => {
-    if (cell.bit) {
-      return cell.index % 4 === 0
-        ? staticSymbol(cell.index + cell.neighborCount)
-        : densitySymbol(cell.index + cell.neighborCount * 2)
-    }
-
-    if (cell.neighborCount >= 2 && (cell.expandedRow + cell.expandedCol * 3) % 6 === 0) {
-      return staticSymbol(cell.index + cell.neighborCount)
-    }
-
-    return ' '
-  })
-}
-
-function renderExpandedGlyph(
-  glyph: GlyphRows,
-  renderCell: (cell: ExpandedCellContext) => string
-): string[] {
-  return Array.from({ length: EXPANDED_GLYPH_HEIGHT }, (_unused, expandedRow) => {
-    const row = Math.floor(expandedRow / GLYPH_SCALE_Y)
-    const subRow = expandedRow % GLYPH_SCALE_Y
-
-    return Array.from({ length: EXPANDED_GLYPH_WIDTH }, (_unusedCell, expandedCol) => {
-      const col = Math.floor(expandedCol / GLYPH_SCALE_X)
-      const subCol = expandedCol % GLYPH_SCALE_X
-      const bit = glyph[row]?.[col] === '1'
-      const cell = renderCell({
-        bit,
-        row,
-        col,
-        subRow,
-        subCol,
-        expandedRow,
-        expandedCol,
-        edge: bit && isEdgePixel(glyph, row, col),
-        neighborCount: countOnNeighbors(glyph, row, col),
-        index: expandedRow * EXPANDED_GLYPH_WIDTH + expandedCol
-      })
-
-      return cell[0] ?? ' '
-    }).join('')
-  })
-}
-
-function hasExpandedBit(glyph: GlyphRows, expandedRow: number, expandedCol: number): boolean {
-  if (
-    expandedRow < 0 ||
-    expandedRow >= EXPANDED_GLYPH_HEIGHT ||
-    expandedCol < 0 ||
-    expandedCol >= EXPANDED_GLYPH_WIDTH
-  ) {
-    return false
-  }
-
-  const row = Math.floor(expandedRow / GLYPH_SCALE_Y)
-  const col = Math.floor(expandedCol / GLYPH_SCALE_X)
-  return glyph[row]?.[col] === '1'
-}
-
-function isEdgePixel(glyph: GlyphRows, row: number, col: number): boolean {
-  return (
-    row === 0 ||
-    row === GLYPH_HEIGHT - 1 ||
-    col === 0 ||
-    col === GLYPH_WIDTH - 1 ||
-    glyph[row - 1]?.[col] !== '1' ||
-    glyph[row + 1]?.[col] !== '1' ||
-    glyph[row]?.[col - 1] !== '1' ||
-    glyph[row]?.[col + 1] !== '1'
-  )
-}
-
-function countOnNeighbors(glyph: GlyphRows, row: number, col: number): number {
-  let count = 0
-
-  for (let y = row - 1; y <= row + 1; y++) {
-    for (let x = col - 1; x <= col + 1; x++) {
-      if (y === row && x === col) continue
-      if (glyph[y]?.[x] === '1') count += 1
+      case 'C': {
+        if (!cursor) break
+        for (let step = 1; step <= CURVE_SEGMENTS; step++) {
+          current.push(cubicPoint(cursor, command, step / CURVE_SEGMENTS))
+        }
+        cursor = { x: command.x, y: command.y }
+        break
+      }
+      case 'Q': {
+        if (!cursor) break
+        for (let step = 1; step <= CURVE_SEGMENTS; step++) {
+          current.push(quadraticPoint(cursor, command, step / CURVE_SEGMENTS))
+        }
+        cursor = { x: command.x, y: command.y }
+        break
+      }
+      case 'Z':
+        if (contourStart) current.push(contourStart)
+        if (current.length > 1) contours.push(current)
+        current = []
+        cursor = null
+        contourStart = null
+        break
     }
   }
 
-  return count
+  if (current.length > 1) contours.push(current)
+  return contours
 }
 
-function pickSymbol(symbols: readonly string[], index: number): string {
-  const normalized = ((index % symbols.length) + symbols.length) % symbols.length
-  return symbols[normalized] ?? symbols[0] ?? '?'
+function cubicPoint(
+  start: Point,
+  command: Extract<PathCommand, { type: 'C' }>,
+  t: number
+): Point {
+  const inverse = 1 - t
+  const a = inverse * inverse * inverse
+  const b = 3 * inverse * inverse * t
+  const c = 3 * inverse * t * t
+  const d = t * t * t
+
+  return {
+    x: a * start.x + b * command.x1 + c * command.x2 + d * command.x,
+    y: a * start.y + b * command.y1 + c * command.y2 + d * command.y
+  }
 }
 
-function denseSymbol(index: number): string {
-  return pickSymbol(DENSE_SYMBOLS, index)
+function quadraticPoint(
+  start: Point,
+  command: Extract<PathCommand, { type: 'Q' }>,
+  t: number
+): Point {
+  const inverse = 1 - t
+  const a = inverse * inverse
+  const b = 2 * inverse * t
+  const c = t * t
+
+  return {
+    x: a * start.x + b * command.x1 + c * command.x,
+    y: a * start.y + b * command.y1 + c * command.y
+  }
 }
 
-function hatchSymbol(index: number): string {
-  return pickSymbol(HATCH_SYMBOLS, index)
+function contoursToSegments(contours: readonly Point[][]): Segment[] {
+  const segments: Segment[] = []
+
+  for (const contour of contours) {
+    for (let index = 0; index + 1 < contour.length; index++) {
+      const a = contour[index] as Point
+      const b = contour[index + 1] as Point
+      if (a.x !== b.x || a.y !== b.y) {
+        segments.push({ a, b })
+      }
+    }
+  }
+
+  return segments
 }
 
-function outlineSymbol(index: number): string {
-  return pickSymbol(OUTLINE_SYMBOLS, index)
+function boundsForContours(contours: readonly Point[][]): Bounds {
+  let minX = Number.POSITIVE_INFINITY
+  let minY = Number.POSITIVE_INFINITY
+  let maxX = Number.NEGATIVE_INFINITY
+  let maxY = Number.NEGATIVE_INFINITY
+
+  for (const contour of contours) {
+    for (const point of contour) {
+      minX = Math.min(minX, point.x)
+      minY = Math.min(minY, point.y)
+      maxX = Math.max(maxX, point.x)
+      maxY = Math.max(maxY, point.y)
+    }
+  }
+
+  return { minX, minY, maxX, maxY }
 }
 
-function densitySymbol(index: number): string {
-  return pickSymbol(DENSITY_SYMBOLS, index)
+function padBounds(bounds: Bounds, padding: number): Bounds {
+  return {
+    minX: Math.floor(bounds.minX) - padding,
+    minY: Math.floor(bounds.minY) - padding,
+    maxX: Math.ceil(bounds.maxX) + padding,
+    maxY: Math.ceil(bounds.maxY) + padding
+  }
 }
 
-function weaveSymbol(index: number): string {
-  return pickSymbol(WEAVE_SYMBOLS, index)
+function cellCoverage(x: number, y: number, segments: readonly Segment[]): number {
+  let hits = 0
+
+  for (const [offsetX, offsetY] of COVERAGE_SAMPLES) {
+    if (isPointInside(x + offsetX, y + offsetY, segments)) {
+      hits += 1
+    }
+  }
+
+  return hits / COVERAGE_SAMPLES.length
 }
 
-function fringeSymbol(index: number): string {
-  return index % 2 === 0 ? '.' : ':'
+function isPointInside(x: number, y: number, segments: readonly Segment[]): boolean {
+  let inside = false
+
+  for (const segment of segments) {
+    const { a, b } = segment
+    const crosses = (a.y > y) !== (b.y > y)
+    if (!crosses) continue
+
+    const intersectionX = ((b.x - a.x) * (y - a.y)) / (b.y - a.y) + a.x
+    if (intersectionX > x) {
+      inside = !inside
+    }
+  }
+
+  return inside
 }
 
-function sparkSymbol(index: number): string {
-  return pickSymbol(SPARK_SYMBOLS, index)
+function densitySymbol(coverage: number): string {
+  if (coverage <= 0) return ' '
+  const index = Math.max(1, Math.ceil(coverage * (DENSITY_RAMP.length - 1)))
+  return DENSITY_RAMP[index] ?? '@'
 }
 
-function shardSymbol(index: number): string {
-  return pickSymbol(SHARD_SYMBOLS, index)
+function cropEmptyRows(rows: readonly string[]): string[] {
+  let top = 0
+  while (top < rows.length && rows[top]?.trim() === '') top += 1
+
+  let bottom = rows.length
+  while (bottom > top && rows[bottom - 1]?.trim() === '') bottom -= 1
+
+  return top < bottom ? rows.slice(top, bottom) : [' ']
 }
 
-function staticSymbol(index: number): string {
-  return pickSymbol(STATIC_SYMBOLS, index)
-}
+function cropEmptyColumns(rows: readonly string[]): string[] {
+  let left = Number.POSITIVE_INFINITY
+  let right = 0
 
-function wireSymbol(glyph: GlyphRows, row: number, col: number): string {
-  const up = glyph[row - 1]?.[col] === '1'
-  const down = glyph[row + 1]?.[col] === '1'
-  const left = glyph[row]?.[col - 1] === '1'
-  const right = glyph[row]?.[col + 1] === '1'
+  for (const row of rows) {
+    const first = row.search(/\S/)
+    if (first === -1) continue
 
-  if ((up || down) && (left || right)) return '+'
-  if (up || down) return '|'
-  if (left || right) return '-'
-  return weaveSymbol(row + col)
-}
+    left = Math.min(left, first)
+    right = Math.max(right, row.search(/\s*$/))
+  }
 
-function blankGlyphRows(): string[] {
-  return Array.from({ length: EXPANDED_GLYPH_HEIGHT }, () =>
-    ''.padEnd(EXPANDED_GLYPH_WIDTH, ' ')
-  )
+  if (!Number.isFinite(left) || right <= left) return [' ']
+  return rows.map((row) => row.slice(left, right))
 }

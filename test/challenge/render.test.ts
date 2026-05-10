@@ -1,3 +1,5 @@
+import { existsSync, statSync } from 'node:fs'
+import { join } from 'node:path'
 import {
   ASCII_ART_FONTS,
   ASCII_ART_SYMBOL_PALETTE,
@@ -16,6 +18,15 @@ import {
 import { ANIMATION_FRAMES, CHALLENGE_CHARSET, CODE_LENGTH_MAX } from '../../src/challenge/types'
 
 describe('challenge renderer', () => {
+  it('bundles the TTF font files used by the renderer', () => {
+    for (const font of ASCII_ART_FONTS) {
+      const path = join(process.cwd(), 'src', 'challenge', 'fonts', font.filename)
+
+      expect(existsSync(path), `missing ${font.filename}`).toBe(true)
+      expect(statSync(path).size, `${font.filename} size`).toBeGreaterThan(100 * 1024)
+    }
+  })
+
   it('has ASCII-art glyphs for every challenge character across every font', () => {
     for (const char of CHALLENGE_CHARSET) {
       expect(hasAsciiArtGlyph(char), `missing glyph for ${char}`).toBe(true)
@@ -39,8 +50,13 @@ describe('challenge renderer', () => {
     expect(new Set(selected).size).toBeGreaterThan(1)
   })
 
-  it('uses a broad printable ASCII palette for generated text art', () => {
-    expect(ASCII_ART_FONTS.length).toBeGreaterThanOrEqual(8)
+  it('uses embedded TTF fonts and a printable ASCII density palette', () => {
+    expect(ASCII_ART_FONTS.map((font) => font.name)).toEqual([
+      'noto-sans-bold',
+      'noto-serif-bold',
+      'anton-regular',
+      'oswald-bold'
+    ])
     expect(ASCII_ART_SYMBOL_PALETTE.length).toBeGreaterThanOrEqual(30)
 
     const allSymbols = new Set<string>()
@@ -54,7 +70,7 @@ describe('challenge renderer', () => {
       const art = renderAsciiCodeArt('A3K9X7', font)
       const fontSymbols = new Set(art.rows.join('').replaceAll(' ', '').split(''))
 
-      expect(fontSymbols.size, `${font.name} symbol count`).toBeGreaterThanOrEqual(4)
+      expect(fontSymbols.size, `${font.name} symbol count`).toBeGreaterThanOrEqual(3)
 
       for (const symbol of fontSymbols) {
         const codePoint = symbol.charCodeAt(0)
@@ -65,7 +81,18 @@ describe('challenge renderer', () => {
       }
     }
 
-    expect(allSymbols.size).toBeGreaterThanOrEqual(24)
+    expect(allSymbols.size).toBeGreaterThanOrEqual(6)
+  })
+
+  it('reflects distinct TTF glyph outlines in the generated ASCII art', () => {
+    const [notoSans, _notoSerif, anton, oswald] = ASCII_ART_FONTS
+    const sansArt = renderAsciiCodeArt('OPENCHA', notoSans!)
+    const antonArt = renderAsciiCodeArt('OPENCHA', anton!)
+    const oswaldArt = renderAsciiCodeArt('OPENCHA', oswald!)
+
+    expect(sansArt.rows.join('\n')).not.toBe(antonArt.rows.join('\n'))
+    expect(sansArt.columns, 'Noto Sans width').not.toBe(antonArt.columns)
+    expect(oswaldArt.columns, 'Oswald width').not.toBe(antonArt.columns)
   })
 
   it('keeps every ASCII-art font within the GIF frame', () => {
@@ -87,7 +114,7 @@ describe('challenge renderer', () => {
       const visibleSymbols = art.rows.join('').replaceAll(' ', '').length
 
       expect(art.rowCount, `${font.name} rows`).toBeGreaterThanOrEqual(28)
-      expect(art.columns, `${font.name} columns`).toBeGreaterThanOrEqual(200)
+      expect(art.columns, `${font.name} columns`).toBeGreaterThanOrEqual(130)
       expect(visibleSymbols, `${font.name} visible symbol density`).toBeGreaterThanOrEqual(480)
     }
   })

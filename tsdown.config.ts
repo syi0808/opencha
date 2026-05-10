@@ -11,5 +11,5 @@ export default defineConfig({
   clean: true,
   dts: false,
   external: [/^node:/],
-  noExternal: ['@actions/core', '@actions/github', 'yaml', 'zod', 'gifenc']
+  noExternal: ['@actions/core', '@actions/github', 'yaml', 'zod', 'gifenc', 'opentype.js']
 })

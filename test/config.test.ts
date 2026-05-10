@@ -1,4 +1,5 @@
 import { ConfigError } from '../src/errors'
+import { CODE_COUNT_DEFAULT } from '../src/challenge/types'
 import { DEFAULT_TRUSTED_BOTS } from '../src/config/defaults'
 import { parseOpenchaConfig } from '../src/config/schema'
 
@@ -9,8 +10,19 @@ describe('OpenCHA config', () => {
     })
 
     expect(parsed.config.trustedBots).toEqual([...DEFAULT_TRUSTED_BOTS, 'my-bot[bot]'])
+    expect(parsed.config.challenge.codeCount).toBe(CODE_COUNT_DEFAULT)
     expect(parsed.config.challenge.maxAttempts).toBe(5)
     expect(parsed.config.assets.branch).toBe('opencha-assets')
+  })
+
+  it('parses configurable challenge code count', () => {
+    const parsed = parseOpenchaConfig({
+      challenge: {
+        code_count: 7
+      }
+    })
+
+    expect(parsed.config.challenge.codeCount).toBe(7)
   })
 
   it('warns for unknown fields without failing', () => {
@@ -29,5 +41,6 @@ describe('OpenCHA config', () => {
 
   it('fails closed for invalid known values', () => {
     expect(() => parseOpenchaConfig({ challenge: { max_attempts: -1 } })).toThrow(ConfigError)
+    expect(() => parseOpenchaConfig({ challenge: { code_count: 2 } })).toThrow(ConfigError)
   })
 })

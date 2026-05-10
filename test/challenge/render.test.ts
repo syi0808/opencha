@@ -86,9 +86,9 @@ describe('challenge renderer', () => {
       const art = renderAsciiCodeArt(code, font)
       const visibleSymbols = art.rows.join('').replaceAll(' ', '').length
 
-      expect(art.rowCount, `${font.name} rows`).toBeGreaterThanOrEqual(14)
-      expect(art.columns, `${font.name} columns`).toBeGreaterThanOrEqual(100)
-      expect(visibleSymbols, `${font.name} visible symbol density`).toBeGreaterThanOrEqual(120)
+      expect(art.rowCount, `${font.name} rows`).toBeGreaterThanOrEqual(28)
+      expect(art.columns, `${font.name} columns`).toBeGreaterThanOrEqual(200)
+      expect(visibleSymbols, `${font.name} visible symbol density`).toBeGreaterThanOrEqual(480)
     }
   })
 

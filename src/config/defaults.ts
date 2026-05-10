@@ -1,3 +1,5 @@
+import { CODE_COUNT_DEFAULT } from '../challenge/types'
+
 export const DEFAULT_TRUSTED_BOTS = [
   'dependabot[bot]',
   'renovate[bot]',
@@ -13,6 +15,7 @@ export interface OpenchaConfig {
     needsMaintainer: string
   }
   challenge: {
+    codeCount: number
     maxAttempts: number
     cooldownSeconds: number
     rotateOnWrongAnswer: boolean
@@ -34,6 +37,7 @@ export const DEFAULT_CONFIG: OpenchaConfig = {
     needsMaintainer: 'opencha: needs maintainer'
   },
   challenge: {
+    codeCount: CODE_COUNT_DEFAULT,
     maxAttempts: 5,
     cooldownSeconds: 30,
     rotateOnWrongAnswer: false

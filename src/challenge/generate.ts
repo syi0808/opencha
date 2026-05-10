@@ -5,10 +5,9 @@ import {
   ANIMATION_FRAMES,
   CHALLENGE_CHARSET,
   CHALLENGE_VERSION,
-  CODE_COUNT,
+  CODE_COUNT_DEFAULT,
   CODE_LENGTH_MAX,
   CODE_LENGTH_MIN,
-  DECOY_COUNT,
   type ChallengeParams,
   type CreateChallengeOptions,
   type GeneratedChallenge,
@@ -20,14 +19,14 @@ export function createChallenge(options: CreateChallengeOptions = {}): Generated
   const seed = options.seed ?? randomBytes(16).toString('base64url')
   const answerSalt = options.answerSalt ?? randomBytes(16).toString('base64url')
   const random = new SeededRandom(seed)
-  const codeLength = CODE_LENGTH_MIN + random.nextInt(CODE_LENGTH_MAX - CODE_LENGTH_MIN + 1)
-  const codeCount = CODE_COUNT
-  const codes = generateUniqueCodes(random, codeCount, codeLength)
+  const codeCount = options.codeCount ?? CODE_COUNT_DEFAULT
+  const codes = generateUniqueCodes(random, codeCount)
   const targetIndex = TARGET_INDEX_MIN + random.nextInt(codeCount - TARGET_INDEX_MIN + 1)
   const answer = codes[targetIndex - 1] as string
   const params: ChallengeParams = {
-    length: codeLength,
-    decoyCount: DECOY_COUNT,
+    codeCount,
+    codeLengths: codes.map((code) => code.length),
+    decoyCount: codeCount - 1,
     animationFrames: ANIMATION_FRAMES,
     charset: CHALLENGE_CHARSET,
     noiseLevel: NOISE_LEVEL,
@@ -53,10 +52,11 @@ export function createChallenge(options: CreateChallengeOptions = {}): Generated
   }
 }
 
-function generateUniqueCodes(random: SeededRandom, count: number, length: number): string[] {
+function generateUniqueCodes(random: SeededRandom, count: number): string[] {
   const codes = new Set<string>()
 
   while (codes.size < count) {
+    const length = CODE_LENGTH_MIN + random.nextInt(CODE_LENGTH_MAX - CODE_LENGTH_MIN + 1)
     codes.add(generateCode(random, length))
   }
 

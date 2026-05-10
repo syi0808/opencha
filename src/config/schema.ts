@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { CODE_COUNT_MAX, CODE_COUNT_MIN } from '../challenge/types'
 import { ConfigError } from '../errors'
 import { DEFAULT_CONFIG, DEFAULT_TRUSTED_BOTS, type OpenchaConfig } from './defaults'
 
@@ -12,6 +13,7 @@ const rawConfigSchema = z.object({
     needs_maintainer: z.string().min(1).optional()
   }).optional(),
   challenge: z.object({
+    code_count: z.number().int().min(CODE_COUNT_MIN).max(CODE_COUNT_MAX).optional(),
     max_attempts: z.number().int().min(1).max(20).optional(),
     cooldown_seconds: z.number().int().min(0).max(3600).optional(),
     rotate_on_wrong_answer: z.boolean().optional()
@@ -28,7 +30,7 @@ const rawConfigSchema = z.object({
 const knownKeys = new Map<string, Set<string>>([
   ['', new Set(['trusted_users', 'trusted_bots', 'labels', 'challenge', 'assets', 'policy'])],
   ['labels', new Set(['verifying', 'needs_maintainer'])],
-  ['challenge', new Set(['max_attempts', 'cooldown_seconds', 'rotate_on_wrong_answer'])],
+  ['challenge', new Set(['code_count', 'max_attempts', 'cooldown_seconds', 'rotate_on_wrong_answer'])],
   ['assets', new Set(['branch', 'cleanup_passed_assets'])],
   ['policy', new Set(['reverify_on_push'])]
 ])
@@ -62,6 +64,7 @@ export function parseOpenchaConfig(input: unknown): ParsedConfig {
         needsMaintainer: raw.labels?.needs_maintainer ?? DEFAULT_CONFIG.labels.needsMaintainer
       },
       challenge: {
+        codeCount: raw.challenge?.code_count ?? DEFAULT_CONFIG.challenge.codeCount,
         maxAttempts: raw.challenge?.max_attempts ?? DEFAULT_CONFIG.challenge.maxAttempts,
         cooldownSeconds: raw.challenge?.cooldown_seconds ?? DEFAULT_CONFIG.challenge.cooldownSeconds,
         rotateOnWrongAnswer: raw.challenge?.rotate_on_wrong_answer ?? DEFAULT_CONFIG.challenge.rotateOnWrongAnswer

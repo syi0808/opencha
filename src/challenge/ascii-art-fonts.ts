@@ -1,8 +1,8 @@
 import { BITMAP_FONT, GLYPH_HEIGHT, GLYPH_WIDTH, type GlyphRows } from './bitmap-font'
 import { SeededRandom } from './random'
 
-const GLYPH_SCALE_X = 3
-const GLYPH_SCALE_Y = 2
+const GLYPH_SCALE_X = 6
+const GLYPH_SCALE_Y = 4
 const EXPANDED_GLYPH_WIDTH = GLYPH_WIDTH * GLYPH_SCALE_X
 const EXPANDED_GLYPH_HEIGHT = GLYPH_HEIGHT * GLYPH_SCALE_Y
 

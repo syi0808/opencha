@@ -4,6 +4,7 @@ import { handleIssueCommentEvent } from '../src/app/comment-flow'
 import { handlePullRequestEvent } from '../src/app/pr-flow'
 import { loadChallengeState } from '../src/app/state'
 import { createChallenge } from '../src/challenge/generate'
+import { CODE_COUNT_DEFAULT } from '../src/challenge/types'
 import type { CheckRunInput, GitHubGateway, IssueComment, PullRequestInfo, RepositoryPermission } from '../src/github/gateway'
 
 describe('OpenCHA flows', () => {
@@ -34,7 +35,8 @@ describe('OpenCHA flows', () => {
 
     const answer = createChallenge({
       seed: state.payload.seed,
-      answerSalt: state.payload.answerSalt
+      answerSalt: state.payload.answerSalt,
+      codeCount: state.payload.challengeParams.codeCount ?? CODE_COUNT_DEFAULT
     }).display.answer
 
     const answerComment = await gateway.createIssueComment('owner', 'repo', 1, `/opencha answer ${answer}`)
@@ -84,6 +86,20 @@ describe('OpenCHA flows', () => {
     if (state.kind !== 'active') throw new Error('expected active state')
     expect(state.payload.attempts).toBe(1)
 
+  })
+
+  it('uses configured code count when issuing a challenge', async () => {
+    const gateway = new FakeGateway({ config: 'challenge:\n  code_count: 7\n' })
+    const report = new ActionRunReport()
+
+    await handlePullRequestEvent({ event: prEvent('opened'), gateway, inputs, report })
+
+    const state = await loadChallengeState(gateway, inputs, gateway.pr)
+    expect(state.kind).toBe('active')
+    if (state.kind !== 'active') throw new Error('expected active state')
+    expect(state.payload.challengeParams.codeCount).toBe(7)
+    expect(state.payload.challengeParams.codeLengths).toHaveLength(7)
+    expect(state.payload.challengeParams.decoyCount).toBe(6)
   })
 
   it('requires maintainer after max attempts', async () => {
@@ -153,7 +169,8 @@ describe('OpenCHA flows', () => {
 
     const answer = createChallenge({
       seed: state.payload.seed,
-      answerSalt: state.payload.answerSalt
+      answerSalt: state.payload.answerSalt,
+      codeCount: state.payload.challengeParams.codeCount ?? CODE_COUNT_DEFAULT
     }).display.answer
 
     await handleIssueCommentEvent({

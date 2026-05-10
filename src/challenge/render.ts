@@ -15,8 +15,8 @@ export interface Frame {
   delayMs: number
 }
 
-export const FRAME_WIDTH = 360
-export const FRAME_HEIGHT = 120
+export const FRAME_WIDTH = 720
+export const FRAME_HEIGHT = 240
 export const FRAME_DELAY_MS = 90
 export const CODE_HOLD_FRAMES = 5
 

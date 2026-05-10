@@ -29,7 +29,7 @@ export async function issueChallenge(input: {
   cooldownUntil?: string | null
 }): Promise<IssuedChallenge> {
   const challengeId = randomUUID()
-  const generated = createChallenge()
+  const generated = createChallenge({ codeCount: input.config.challenge.codeCount })
   const frames = renderChallengeFrames(generated.display)
   const gif = encodeGif(frames)
   const assetStore = new GitBranchAssetStore(input.gateway, input.config.assets.branch, input.pr.baseRef)

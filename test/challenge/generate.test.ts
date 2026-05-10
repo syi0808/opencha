@@ -4,10 +4,11 @@ import {
   ANIMATION_FRAMES,
   CHALLENGE_CHARSET,
   CHALLENGE_VERSION,
-  CODE_COUNT,
+  CODE_COUNT_DEFAULT,
+  CODE_COUNT_MAX,
+  CODE_COUNT_MIN,
   CODE_LENGTH_MAX,
   CODE_LENGTH_MIN,
-  DECOY_COUNT,
   NOISE_LEVEL,
   TARGET_INDEX_MAX,
   TARGET_INDEX_MIN
@@ -28,39 +29,62 @@ describe('createChallenge', () => {
     expect(first.display.codes).not.toEqual(second.display.codes)
   })
 
-  it('uses only the allowed charset, fixed visible code count, and unique variable-length codes', () => {
+  it('uses only the allowed charset, default code count, and unique per-code lengths', () => {
     const challenge = createChallenge({ seed: 'charset-seed', answerSalt: 'salt' })
     const allowed = new RegExp(`^[${CHALLENGE_CHARSET}]+$`)
 
-    expect(challenge.display.codes).toHaveLength(CODE_COUNT)
+    expect(challenge.display.codes).toHaveLength(CODE_COUNT_DEFAULT)
     expect(new Set(challenge.display.codes).size).toBe(challenge.display.codes.length)
-    expect(challenge.payload.challengeParams.length).toBeGreaterThanOrEqual(CODE_LENGTH_MIN)
-    expect(challenge.payload.challengeParams.length).toBeLessThanOrEqual(CODE_LENGTH_MAX)
+    expect(challenge.payload.challengeParams.codeCount).toBe(CODE_COUNT_DEFAULT)
+    expect(challenge.payload.challengeParams.codeLengths).toEqual(
+      challenge.display.codes.map((code) => code.length)
+    )
 
     for (const code of challenge.display.codes) {
-      expect(code).toHaveLength(challenge.payload.challengeParams.length)
+      expect(code.length).toBeGreaterThanOrEqual(CODE_LENGTH_MIN)
+      expect(code.length).toBeLessThanOrEqual(CODE_LENGTH_MAX)
       expect(code).toMatch(allowed)
     }
   })
 
-  it('keeps the visible code count fixed and varies code length by seed', () => {
-    const lengths = new Set<number>()
+  it('accepts configurable visible code count', () => {
+    const challenge = createChallenge({ seed: 'count-seed', answerSalt: 'salt', codeCount: CODE_COUNT_MAX })
+
+    expect(challenge.display.codes).toHaveLength(CODE_COUNT_MAX)
+    expect(challenge.payload.challengeParams.codeCount).toBe(CODE_COUNT_MAX)
+    expect(challenge.payload.challengeParams.decoyCount).toBe(CODE_COUNT_MAX - 1)
+  })
+
+  it('varies code length independently within challenges', () => {
+    let sawMixedLengths = false
 
     for (let i = 0; i < 64; i++) {
-      const challenge = createChallenge({ seed: `length-seed-${i}`, answerSalt: 'salt' })
-      lengths.add(challenge.payload.challengeParams.length)
+      const challenge = createChallenge({
+        seed: `length-seed-${i}`,
+        answerSalt: 'salt',
+        codeCount: CODE_COUNT_MAX
+      })
+      const lengths = challenge.display.codes.map((code) => code.length)
 
-      expect(challenge.display.codes).toHaveLength(CODE_COUNT)
-      expect(challenge.payload.challengeParams.decoyCount).toBe(DECOY_COUNT)
-      expect(challenge.payload.challengeParams.length).toBeGreaterThanOrEqual(CODE_LENGTH_MIN)
-      expect(challenge.payload.challengeParams.length).toBeLessThanOrEqual(CODE_LENGTH_MAX)
+      expect(challenge.display.codes).toHaveLength(CODE_COUNT_MAX)
+      expect(challenge.payload.challengeParams.codeLengths).toEqual(lengths)
+      expect(challenge.payload.challengeParams.decoyCount).toBe(CODE_COUNT_MAX - 1)
+
+      for (const length of lengths) {
+        expect(length).toBeGreaterThanOrEqual(CODE_LENGTH_MIN)
+        expect(length).toBeLessThanOrEqual(CODE_LENGTH_MAX)
+      }
+
+      if (new Set(lengths).size > 1) {
+        sawMixedLengths = true
+      }
     }
 
-    expect(lengths.size).toBeGreaterThan(1)
+    expect(sawMixedLengths).toBe(true)
   })
 
   it('sets target index, params, and answer hash payload fields', () => {
-    const challenge = createChallenge({ seed: 'params-seed', answerSalt: 'salt' })
+    const challenge = createChallenge({ seed: 'params-seed', answerSalt: 'salt', codeCount: CODE_COUNT_MIN })
 
     expect(challenge.display.targetIndex).toBeGreaterThanOrEqual(TARGET_INDEX_MIN)
     expect(challenge.display.targetIndex).toBeLessThanOrEqual(TARGET_INDEX_MAX)
@@ -71,8 +95,9 @@ describe('createChallenge', () => {
       true
     )
     expect(challenge.payload.challengeParams).toEqual({
-      length: challenge.display.answer.length,
-      decoyCount: DECOY_COUNT,
+      codeCount: CODE_COUNT_MIN,
+      codeLengths: challenge.display.codes.map((code) => code.length),
+      decoyCount: CODE_COUNT_MIN - 1,
       animationFrames: ANIMATION_FRAMES,
       charset: CHALLENGE_CHARSET,
       noiseLevel: NOISE_LEVEL,

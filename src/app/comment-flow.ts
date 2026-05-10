@@ -162,7 +162,7 @@ async function handleApprove(input: CommentFlowInput, pr: PullRequestInfo, confi
     await hideCommentBestEffort(input.gateway, state.comment.nodeId, input.report)
   }
 
-  const generated = createChallenge()
+  const generated = createChallenge({ codeCount: config.challenge.codeCount })
   const now = new Date()
   const payload: ChallengePayload = {
     schema: 1,

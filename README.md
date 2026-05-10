@@ -63,6 +63,7 @@ labels:
   needs_maintainer: "opencha: needs maintainer"
 
 challenge:
+  code_count: 5
   max_attempts: 5
   cooldown_seconds: 30
   rotate_on_wrong_answer: false
@@ -75,9 +76,11 @@ policy:
   reverify_on_push: false
 ```
 
+`challenge.code_count` controls the number of visible codes and accepts values from 3 to 7.
+
 ## Challenge Flow
 
-The MVP challenge is a rasterized GIF. It renders five unique codes with a seed-stable randomized code length, dense ASCII-art font styles, and slides from one code to the next without per-frame index markers or transition-only text color changes.
+The MVP challenge is a rasterized GIF. It renders a configurable number of unique codes with independently randomized code lengths, dense ASCII-art font styles, and slides from one code to the next without per-frame index markers or transition-only text color changes.
 
 Untrusted PR authors reply to the challenge with:
 

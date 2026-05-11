@@ -49,9 +49,10 @@ const WHEEL_LABEL_TRACKING = -2
 const WHEEL_SYMBOL_JITTER_X_PX = [-3, -2, -1, 0, 1, 2, 3] as const
 const WHEEL_SYMBOL_JITTER_Y_PX = [-1, 0, 1] as const
 const WHEEL_SYMBOL_ROTATION_DEGREES = [-7, -5, -3, 0, 3, 5, 7] as const
+const WHEEL_SYMBOL_SCALE_Y = [0.8, 0.84, 0.88] as const
 const POINTER_INSET = 34
 const POINTER_ARROWHEAD_LENGTH = 14
-const TEMPORAL_START_MARKER_FRAMES = 6
+const TEMPORAL_START_MARKER_FRAMES = 8
 
 const TINY_ASCII_FONT: Record<string, readonly string[]> = {
   '!': ['010', '010', '010', '000', '010'],
@@ -263,6 +264,7 @@ interface TemporalWheelSymbolStyle {
   offsetX: number
   offsetY: number
   rotationDegrees: number
+  scaleY: number
   color: RgbaColor
 }
 
@@ -283,6 +285,7 @@ function temporalWheelSymbolStyle(seed: string, symbolIndex: number): TemporalWh
     rotationDegrees: WHEEL_SYMBOL_ROTATION_DEGREES[
       random.nextInt(WHEEL_SYMBOL_ROTATION_DEGREES.length)
     ] as number,
+    scaleY: WHEEL_SYMBOL_SCALE_Y[random.nextInt(WHEEL_SYMBOL_SCALE_Y.length)] as number,
     color: selectTemporalWheelColor(random)
   }
 }
@@ -526,13 +529,18 @@ function drawTemporalHub(rgba: Uint8Array): void {
 function drawTemporalStartMarker(rgba: Uint8Array, frameIndex: number): void {
   if (frameIndex >= TEMPORAL_START_MARKER_FRAMES) return
 
-  const x = 20
-  const y = 20
-  drawLine(rgba, x, y, x, y + 21, TEXT)
-  drawLine(rgba, x, y, x + 17, y + 5, TEXT)
-  drawLine(rgba, x + 17, y + 5, x, y + 10, TEXT)
-  drawLine(rgba, x + 3, y + 14, x + 14, y + 14, MUTED)
-  drawLine(rgba, x + 5, y + 18, x + 12, y + 18, MUTED)
+  const progress = frameIndex / Math.max(1, TEMPORAL_START_MARKER_FRAMES - 1)
+  const startAngle = -126 + Math.round(progress * 10)
+  const endAngle = -54 - Math.round(progress * 10)
+  const radius = WHEEL_RADIUS_Y + 38
+
+  for (const offset of [0, 1, 2]) {
+    drawArc(rgba, POINTER_CENTER_X, POINTER_CENTER_Y, radius + offset, startAngle, endAngle, TEXT)
+  }
+
+  drawLine(rgba, POINTER_CENTER_X - 20, 30, POINTER_CENTER_X + 20, 30, TEXT)
+  drawLine(rgba, POINTER_CENTER_X - 12, 36, POINTER_CENTER_X + 12, 36, MUTED)
+  drawLine(rgba, POINTER_CENTER_X - 5, 42, POINTER_CENTER_X + 5, 42, MUTED)
 }
 
 function wheelSymbolPosition(
@@ -683,7 +691,7 @@ function drawAsciiArtRowsTransformed(
       const cellX = x + style.offsetX + col * ASCII_ART_CELL_ADVANCE_X
       const cellY = y + style.offsetY + row * ASCII_ART_CELL_ADVANCE_Y
       const dx = cellX + TINY_GLYPH_WIDTH / 2 - centerX
-      const dy = cellY + TINY_GLYPH_HEIGHT / 2 - centerY
+      const dy = (cellY + TINY_GLYPH_HEIGHT / 2 - centerY) * style.scaleY
       const rotatedX = centerX + dx * cos - dy * sin - TINY_GLYPH_WIDTH / 2
       const rotatedY = centerY + dx * sin + dy * cos - TINY_GLYPH_HEIGHT / 2
 
@@ -809,6 +817,30 @@ function drawLine(
 
     dx = Math.abs(x1 - x0)
     dy = -Math.abs(y1 - y0)
+  }
+}
+
+function drawArc(
+  rgba: Uint8Array,
+  centerX: number,
+  centerY: number,
+  radius: number,
+  startAngleDegrees: number,
+  endAngleDegrees: number,
+  color: readonly [number, number, number, number]
+): void {
+  const steps = Math.max(6, Math.ceil(Math.abs(endAngleDegrees - startAngleDegrees) / 4))
+  let previousX = Math.round(centerX + Math.cos(degreesToRadians(startAngleDegrees)) * radius)
+  let previousY = Math.round(centerY + Math.sin(degreesToRadians(startAngleDegrees)) * radius)
+
+  for (let step = 1; step <= steps; step++) {
+    const progress = step / steps
+    const angle = startAngleDegrees + (endAngleDegrees - startAngleDegrees) * progress
+    const x = Math.round(centerX + Math.cos(degreesToRadians(angle)) * radius)
+    const y = Math.round(centerY + Math.sin(degreesToRadians(angle)) * radius)
+    drawLine(rgba, previousX, previousY, x, y, color)
+    previousX = x
+    previousY = y
   }
 }
 

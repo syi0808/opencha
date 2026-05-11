@@ -283,7 +283,7 @@ describe('challenge renderer', () => {
 
     const frames = renderChallengeFrames(challenge)
     const firstFrame = frames[0]
-    const laterFrame = frames[8]
+    const laterFrame = frames[10]
     if (!firstFrame || !laterFrame) throw new Error('expected temporal frames')
 
     const textColorKeys = new Set(ASCII_ART_CHARACTER_COLORS.map(colorKey))
@@ -300,8 +300,9 @@ describe('challenge renderer', () => {
         4.5
       )
     }
-    expect(countColorPixelsInRect(firstFrame.rgba, [41, 44, 48, 255], 18, 18, 42, 44)).toBeGreaterThan(20)
-    expect(countColorPixelsInRect(laterFrame.rgba, [41, 44, 48, 255], 18, 18, 42, 44)).toBe(0)
+    const firstMarkerPixels = countColorPixelsInRect(firstFrame.rgba, [41, 44, 48, 255], 160, 8, 368, 48)
+    const laterMarkerPixels = countColorPixelsInRect(laterFrame.rgba, [41, 44, 48, 255], 160, 8, 368, 48)
+    expect(firstMarkerPixels).toBeGreaterThan(laterMarkerPixels + 60)
   })
 
   it('draws pixels that differ from the background', () => {

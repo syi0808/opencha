@@ -3,7 +3,7 @@ import { decryptJson, encryptJson } from '../crypto/envelope'
 import { derivePayloadKey } from '../crypto/keys'
 import { PayloadDecryptError } from '../errors'
 import type { GitHubGateway, IssueComment, PullRequestInfo } from '../github/gateway'
-import { extractEncryptedPayload } from '../state/comments'
+import { extractEncryptedPayload, isManagedBody } from '../state/comments'
 import { parseChallengePayload, PAYLOAD_PURPOSE, type ChallengePayload } from '../state/payload'
 
 export type LoadedChallengeState =
@@ -19,11 +19,11 @@ export async function loadChallengeState(
   pr: PullRequestInfo
 ): Promise<LoadedChallengeState> {
   const comments = await gateway.listIssueComments(pr.baseOwner, pr.baseRepo, pr.number)
-  const markerComments = comments
-    .filter((comment) => comment.body.includes('<!-- opencha:challenge -->'))
+  const managedComments = comments
+    .filter((comment) => isManagedBody(comment.body))
     .sort((a, b) => b.id - a.id)
 
-  for (const comment of markerComments) {
+  for (const comment of managedComments) {
     const token = extractEncryptedPayload(comment.body)
     if (!token) continue
 

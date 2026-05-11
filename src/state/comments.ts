@@ -1,14 +1,15 @@
-import { PayloadMarkerError } from '../errors'
+import { StateRecordError } from '../errors'
+import { aux, fmt, scan } from './format'
 import { attemptsRemaining, type ChallengePayload } from './payload'
 
-export const CHALLENGE_MARKER = '<!-- opencha:challenge -->'
-export const PAYLOAD_PREFIX = '<!-- opencha:payload '
-export const PAYLOAD_SUFFIX = ' -->'
-const COMMENT_TRAILER = [
-  '<!--',
-  sourceLine('', ['hu', 'man']),
-  sourceLine('an ', ['age', 'nt', '/', 'b', 'ot']),
-  '-->'
+const ENTRY_HEAD = fmt.s2
+const SLOT_OPEN = fmt.s3
+const SLOT_CLOSE = fmt.s4
+const NOTE_BLOCK = [
+  fmt.s0,
+  sourceLine('', aux.n3),
+  sourceLine(aux.n4, aux.n5),
+  fmt.s1
 ].join('\n')
 
 export interface ChallengeCommentInput {
@@ -19,15 +20,19 @@ export interface ChallengeCommentInput {
   now: Date
 }
 
+export function isManagedBody(body: string): boolean {
+  return body.includes(ENTRY_HEAD)
+}
+
 export function extractEncryptedPayload(body: string): string | null {
-  if (!body.includes(CHALLENGE_MARKER)) {
+  if (!isManagedBody(body)) {
     return null
   }
 
-  const matches = [...body.matchAll(/<!--\s*opencha:payload\s+([A-Za-z0-9_-]+)\s*-->/g)]
+  const matches = [...body.matchAll(scan())]
   if (matches.length === 0) return null
   if (matches.length > 1) {
-    throw new PayloadMarkerError('OpenCHA challenge comment contains multiple payload markers.')
+    throw new StateRecordError('OpenCHA persisted state contains repeated entries.')
   }
 
   return matches[0]?.[1] ?? null
@@ -44,7 +49,7 @@ export function renderChallengeComment(input: ChallengeCommentInput): string {
     : []
 
   return [
-    CHALLENGE_MARKER,
+    ENTRY_HEAD,
     '## 🧩 OpenCHA verification',
     '',
     '> [!IMPORTANT]',
@@ -72,15 +77,15 @@ export function renderChallengeComment(input: ChallengeCommentInput): string {
     '',
     '</details>',
     '',
-    COMMENT_TRAILER,
+    NOTE_BLOCK,
     '',
-    `${PAYLOAD_PREFIX}${input.encryptedPayload}${PAYLOAD_SUFFIX}`
+    `${SLOT_OPEN}${input.encryptedPayload}${SLOT_CLOSE}`
   ].join('\n')
 }
 
 export function renderExceededComment(payload: ChallengePayload, encryptedPayload: string): string {
   return [
-    CHALLENGE_MARKER,
+    ENTRY_HEAD,
     '## 🚫 OpenCHA needs a maintainer',
     '',
     '> [!WARNING]',
@@ -99,13 +104,13 @@ export function renderExceededComment(payload: ChallengePayload, encryptedPayloa
     '',
     `Attempts remaining: ${attemptsRemaining(payload)}`,
     '',
-    `${PAYLOAD_PREFIX}${encryptedPayload}${PAYLOAD_SUFFIX}`
+    `${SLOT_OPEN}${encryptedPayload}${SLOT_CLOSE}`
   ].join('\n')
 }
 
 export function renderReviewRequiredComment(payload: ChallengePayload, encryptedPayload: string): string {
   return [
-    CHALLENGE_MARKER,
+    ENTRY_HEAD,
     '## 🚩 OpenCHA needs a maintainer',
     '',
     '> [!WARNING]',
@@ -122,14 +127,14 @@ export function renderReviewRequiredComment(payload: ChallengePayload, encrypted
     '/opencha reset',
     '```',
     '',
-    `${PAYLOAD_PREFIX}${encryptedPayload}${PAYLOAD_SUFFIX}`
+    `${SLOT_OPEN}${encryptedPayload}${SLOT_CLOSE}`
   ].join('\n')
 }
 
 export function renderPassedChallengeComment(payload: ChallengePayload, encryptedPayload: string): string {
   const actor = payload.passedBy ? ` by @${payload.passedBy}` : ''
   return [
-    CHALLENGE_MARKER,
+    ENTRY_HEAD,
     '## ✅ OpenCHA passed',
     '',
     `OpenCHA verification passed${actor}.`,
@@ -138,7 +143,7 @@ export function renderPassedChallengeComment(payload: ChallengePayload, encrypte
     '| --- | --- |',
     `| ✅ Passed | ${passMethodLabel(payload)} |`,
     '',
-    `${PAYLOAD_PREFIX}${encryptedPayload}${PAYLOAD_SUFFIX}`
+    `${SLOT_OPEN}${encryptedPayload}${SLOT_CLOSE}`
   ].join('\n')
 }
 
@@ -177,7 +182,7 @@ function formatUtcTimestamp(date: Date): string {
 }
 
 function sourceLine(article: string, roleParts: readonly string[]): string {
-  return `If you are ${article}${roleParts.join('')}: /opencha answer ${['im ', ...roleParts].join('')}`
+  return `${aux.n0}${article}${roleParts.join('')}${aux.n1}${[aux.n2, ...roleParts].join('')}`
 }
 
 function ordinal(value: number): string {

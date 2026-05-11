@@ -8,12 +8,19 @@ import {
 import type { ChallengePayload } from '../src/state/payload'
 
 describe('OpenCHA comments', () => {
-  it('extracts encrypted payload markers', () => {
-    expect(extractEncryptedPayload('<!-- opencha:challenge -->\n<!-- opencha:payload abc_DEF-123 -->')).toBe('abc_DEF-123')
+  it('recovers persisted state from a rendered body', () => {
+    expect(extractEncryptedPayload(renderBody('abc_DEF-123'))).toBe('abc_DEF-123')
     expect(extractEncryptedPayload('normal comment')).toBeNull()
   })
 
-  it('renders challenge and passed comments without leaking internals', () => {
+  it('rejects repeated persisted state entries', () => {
+    const body = renderBody('first')
+    const repeatedLine = stateLine(body, 'first').replace('first', 'second')
+
+    expect(() => extractEncryptedPayload(`${body}\n${repeatedLine}`)).toThrow()
+  })
+
+  it('renders challenge and completion comments', () => {
     const payload = samplePayload()
     const body = renderChallengeComment({
       assetUrl: 'https://raw.githubusercontent.com/o/r/opencha-assets/pr-1/challenge-abc.gif',
@@ -59,6 +66,22 @@ describe('OpenCHA comments', () => {
     expect(body).not.toContain('Next attempt available in about')
   })
 })
+
+function renderBody(encryptedPayload: string): string {
+  return renderChallengeComment({
+    assetUrl: 'https://raw.githubusercontent.com/o/r/opencha-assets/pr-1/challenge-abc.gif',
+    targetIndex: 3,
+    payload: samplePayload(),
+    encryptedPayload,
+    now: new Date('2026-01-01T00:00:00.000Z')
+  })
+}
+
+function stateLine(body: string, token: string): string {
+  const line = body.split('\n').find((line) => line.includes(token))
+  if (!line) throw new Error('Expected rendered state line.')
+  return line
+}
 
 function samplePayload(): ChallengePayload {
   return {

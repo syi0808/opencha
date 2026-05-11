@@ -23,10 +23,10 @@ export class PayloadDecryptError extends OpenchaError {
   }
 }
 
-export class PayloadMarkerError extends OpenchaError {
+export class StateRecordError extends OpenchaError {
   constructor(message: string) {
-    super(message, 'payload_marker_error', true)
-    this.name = 'PayloadMarkerError'
+    super(message, 'state_record_error', true)
+    this.name = 'StateRecordError'
   }
 }
 

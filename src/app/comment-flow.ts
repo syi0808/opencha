@@ -19,15 +19,13 @@ import {
   renderPassedChallengeComment,
   renderReviewRequiredComment
 } from '../state/comments'
+import { alt } from '../state/format'
 import type { ChallengePayload } from '../state/payload'
 import { encryptPayload, loadChallengeState } from './state'
 import { cleanupStateBestEffort, failClosed, loadConfigForPr, startNewChallenge, trustForActor } from './pr-flow'
 import { completePass } from './pass-flow'
 
-const COMMENT_TRAILER_REPLIES = new Set([
-  ['im ', 'hu', 'man'].join(''),
-  ['im ', 'age', 'nt', '/', 'b', 'ot'].join('')
-])
+const COMMAND_BRANCHES = new Set(alt)
 
 export interface CommentFlowInput {
   event: Extract<OpenchaEvent, { kind: 'comment' }>
@@ -193,7 +191,7 @@ async function handleManualReviewReply(
 }
 
 function isManualReviewReply(answer: string): boolean {
-  return COMMENT_TRAILER_REPLIES.has(answer.trim().toLowerCase().replace(/\s+/g, ' '))
+  return COMMAND_BRANCHES.has(answer.trim().toLowerCase().replace(/\s+/g, ' '))
 }
 
 async function handleApprove(input: CommentFlowInput, pr: PullRequestInfo, config: OpenchaConfig): Promise<void> {

@@ -53,8 +53,7 @@ const WHEEL_SYMBOL_SCALE_Y = [0.8, 0.84, 0.88] as const
 const POINTER_INSET = 34
 const POINTER_ARROWHEAD_LENGTH = 14
 const TEMPORAL_TIMELINE_BORDER_INSET = 10
-const TEMPORAL_TIMELINE_BORDER_THICKNESS = 1
-const TEMPORAL_TIMELINE_FADE_RATIO = 0.45
+const TEMPORAL_TIMELINE_BORDER_THICKNESS = 3
 
 const TINY_ASCII_FONT: Record<string, readonly string[]> = {
   '!': ['010', '010', '010', '000', '010'],
@@ -534,8 +533,7 @@ function drawTemporalTimelineBorder(rgba: Uint8Array, frameIndex: number, frameC
   const right = FRAME_WIDTH - TEMPORAL_TIMELINE_BORDER_INSET - 1
   const bottom = FRAME_HEIGHT - TEMPORAL_TIMELINE_BORDER_INSET - 1
   const perimeter = 2 * ((right - left) + (bottom - top))
-  const fadeFrames = Math.max(1, Math.floor(frameCount * TEMPORAL_TIMELINE_FADE_RATIO))
-  const progress = Math.min(1, frameIndex / fadeFrames)
+  const progress = frameIndex / Math.max(1, frameCount - 1)
   const activeLength = Math.round(perimeter * (1 - progress))
 
   for (let offset = 0; offset < TEMPORAL_TIMELINE_BORDER_THICKNESS; offset++) {
@@ -582,7 +580,7 @@ function fill(rgba: Uint8Array, color: readonly [number, number, number, number]
 }
 
 function drawDustField(rgba: Uint8Array, random: SeededRandom): void {
-  for (let i = 0; i < 180; i++) {
+  for (let i = 0; i < 120; i++) {
     setPixel(
       rgba,
       random.nextInt(FRAME_WIDTH),
@@ -591,7 +589,7 @@ function drawDustField(rgba: Uint8Array, random: SeededRandom): void {
     )
   }
 
-  for (let i = 0; i < 46; i++) {
+  for (let i = 0; i < 24; i++) {
     const symbol = DUST_SYMBOLS[random.nextInt(DUST_SYMBOLS.length)] as string
     drawTinySymbol(
       rgba,
@@ -604,7 +602,7 @@ function drawDustField(rgba: Uint8Array, random: SeededRandom): void {
 }
 
 function drawLines(rgba: Uint8Array, random: SeededRandom): void {
-  for (let i = 0; i < 7; i++) {
+  for (let i = 0; i < 5; i++) {
     drawLine(
       rgba,
       random.nextInt(FRAME_WIDTH),

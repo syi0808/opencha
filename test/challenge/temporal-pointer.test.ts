@@ -37,6 +37,8 @@ describe('temporal pointer challenge', () => {
     expect(display.answer.length).toBeLessThanOrEqual(CODE_LENGTH_MAX)
     expect(display.wheelSymbols).toHaveLength(TEMPORAL_RING_SIZE)
     expect(new Set(display.wheelSymbols).size).toBe(display.wheelSymbols.length)
+    expect(display.wheelSymbols.some((symbol) => /^[a-z]$/.test(symbol))).toBe(true)
+    expect(display.wheelSymbols.some((symbol) => /^[A-Z]$/.test(symbol))).toBe(true)
     expect(display.params).toEqual({
       kind: TEMPORAL_POINTER_KIND,
       codeLength: display.answer.length,
@@ -56,6 +58,7 @@ describe('temporal pointer challenge', () => {
     expect(challenge.payload.challengeParams).toEqual(display.params)
     expect(challenge.payload).not.toHaveProperty('answer')
     expect(verifyAnswer(display.answer, challenge.payload.answerSalt, challenge.payload.answerHash)).toBe(true)
+    expect(verifyAnswer(invertAsciiCase(display.answer), challenge.payload.answerSalt, challenge.payload.answerHash)).toBe(true)
   })
 
   it('prevents the full answer from being encoded by one static ring frame', () => {
@@ -111,3 +114,13 @@ describe('temporal pointer challenge', () => {
     }
   })
 })
+
+function invertAsciiCase(value: string): string {
+  return [...value]
+    .map((char) => {
+      if (/^[a-z]$/.test(char)) return char.toUpperCase()
+      if (/^[A-Z]$/.test(char)) return char.toLowerCase()
+      return char
+    })
+    .join('')
+}

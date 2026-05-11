@@ -32,9 +32,12 @@ export function createTemporalPointerDisplay(
   const random = new SeededRandom(`${options.seed}:temporal-pointer`)
 
   for (let attempt = 0; attempt < MAX_ANSWER_ATTEMPTS; attempt++) {
-    const answer = generateTemporalAnswer(random)
-    const wheelSymbols = buildLeakFreeWheel(random, answer)
-    if (!wheelSymbols) continue
+    const canonicalAnswer = generateTemporalAnswer(random)
+    const canonicalWheelSymbols = buildLeakFreeWheel(random, canonicalAnswer)
+    if (!canonicalWheelSymbols) continue
+
+    const wheelSymbols = applyTemporalCaseVariants(options.seed, canonicalWheelSymbols)
+    const answer = applyWheelCaseToAnswer(canonicalAnswer, canonicalWheelSymbols, wheelSymbols)
 
     const decoyPauseCount = 0
     const timeline = buildPointerTimeline({
@@ -125,6 +128,45 @@ function buildLeakFreeWheel(random: SeededRandom, answer: string): string[] | nu
   }
 
   return null
+}
+
+function applyTemporalCaseVariants(seed: string, wheelSymbols: readonly string[]): string[] {
+  const random = new SeededRandom(`${seed}:temporal-pointer:case-variants`)
+  const result = wheelSymbols.map((symbol) =>
+    isCaseVariantSymbol(symbol) && random.nextInt(2) === 0 ? symbol.toLowerCase() : symbol
+  )
+  const letterIndexes = wheelSymbols
+    .map((symbol, index) => ({ symbol, index }))
+    .filter(({ symbol }) => isCaseVariantSymbol(symbol))
+
+  if (letterIndexes.length >= 2) {
+    if (!letterIndexes.some(({ index }) => result[index] === result[index]?.toLowerCase())) {
+      const selected = letterIndexes[random.nextInt(letterIndexes.length)]!
+      result[selected.index] = selected.symbol.toLowerCase()
+    }
+
+    if (!letterIndexes.some(({ index }) => result[index] === result[index]?.toUpperCase())) {
+      const candidates = letterIndexes.filter(({ index }) => result[index] !== result[index]?.toUpperCase())
+      const selected = candidates[random.nextInt(candidates.length)] ?? letterIndexes[0]!
+      result[selected.index] = selected.symbol.toUpperCase()
+    }
+  }
+
+  return result
+}
+
+function applyWheelCaseToAnswer(
+  canonicalAnswer: string,
+  canonicalWheelSymbols: readonly string[],
+  wheelSymbols: readonly string[]
+): string {
+  return [...canonicalAnswer]
+    .map((symbol) => wheelSymbols[canonicalWheelSymbols.indexOf(symbol)] ?? symbol)
+    .join('')
+}
+
+function isCaseVariantSymbol(symbol: string): boolean {
+  return /^[A-Z]$/.test(symbol)
 }
 
 function buildPointerTimeline(input: {

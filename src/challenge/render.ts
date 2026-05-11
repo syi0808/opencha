@@ -421,10 +421,20 @@ function temporalCellScore(
   phase: string,
   cell: TemporalArtCell
 ): number {
-  const random = new SeededRandom(
+  return normalizedHash(
     `${seed}:temporal-symbol-interference:${phase}:${symbolIndex}:${frameIndex}:${cell.row}:${cell.col}`
   )
-  return random.nextFloat()
+}
+
+function normalizedHash(value: string): number {
+  let hash = 2166136261
+
+  for (let index = 0; index < value.length; index++) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+
+  return (hash >>> 0) / 0x100000000
 }
 
 function drawTemporalPointer(rgba: Uint8Array, angleDegrees: number): void {

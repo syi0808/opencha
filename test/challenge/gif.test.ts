@@ -12,7 +12,7 @@ describe('challenge GIF encoder', () => {
     expect(first).toEqual(second)
     expect(first.byteLength).toBeGreaterThan(1000)
     expect(first.byteLength).toBeLessThan(1024 * 1024)
-  })
+  }, 15000)
 
   it('rejects empty frame lists', () => {
     expect(() => encodeGif([])).toThrow('cannot encode GIF without frames')

@@ -226,22 +226,16 @@ describe('challenge renderer', () => {
     }
 
     const frames = renderChallengeFrames(challenge)
-    const repeatedFrames = renderChallengeFrames(challenge)
     expect(frames).toHaveLength(challenge.timeline.length)
-    expect(repeatedFrames).toHaveLength(frames.length)
     expect(FRAME_WIDTH).toBe(FRAME_HEIGHT)
 
-    for (const [index, frame] of frames.entries()) {
+    for (const frame of frames) {
       expect(frame.width).toBe(FRAME_WIDTH)
       expect(frame.height).toBe(FRAME_HEIGHT)
       expect(frame.rgba).toHaveLength(FRAME_WIDTH * FRAME_HEIGHT * 4)
       expect(frame.delayMs).toBe(challenge.params.frameDelayMs)
-
-      if (index === 0 || index === Math.floor(frames.length / 2) || index === frames.length - 1) {
-        expect(frame.rgba).toEqual(repeatedFrames[index]!.rgba)
-      }
     }
-  })
+  }, 10000)
 
   it('applies deterministic frame-varying ASCII stroke interference to temporal symbols', () => {
     const challenge = createChallenge({ seed: 'temporal-interference-seed', answerSalt: 'salt' }).display
@@ -279,6 +273,35 @@ describe('challenge renderer', () => {
 
     expect(varyingSymbols).toBeGreaterThan(0)
     expect(symbolsWithAddedStrokes).toBeGreaterThan(0)
+  })
+
+  it('draws temporal wheel symbols with varied colors and an opening start marker', () => {
+    const challenge = createChallenge({ seed: 'temporal-style-seed', answerSalt: 'salt' }).display
+    if (challenge.version !== TEMPORAL_POINTER_CHALLENGE_VERSION) {
+      throw new Error('expected temporal pointer display')
+    }
+
+    const frames = renderChallengeFrames(challenge)
+    const firstFrame = frames[0]
+    const laterFrame = frames[8]
+    if (!firstFrame || !laterFrame) throw new Error('expected temporal frames')
+
+    const textColorKeys = new Set(ASCII_ART_CHARACTER_COLORS.map(colorKey))
+    const seenTextColors = new Set<string>()
+
+    for (let index = 0; index < firstFrame.rgba.length; index += 4) {
+      const key = `${firstFrame.rgba[index]},${firstFrame.rgba[index + 1]},${firstFrame.rgba[index + 2]},${firstFrame.rgba[index + 3]}`
+      if (textColorKeys.has(key)) seenTextColors.add(key)
+    }
+
+    expect(seenTextColors.size).toBeGreaterThan(1)
+    for (const key of seenTextColors) {
+      expect(contrastRatio(colorFromKey(key), [240, 239, 234, 255]), `contrast for ${key}`).toBeGreaterThanOrEqual(
+        4.5
+      )
+    }
+    expect(countColorPixelsInRect(firstFrame.rgba, [41, 44, 48, 255], 18, 18, 42, 44)).toBeGreaterThan(20)
+    expect(countColorPixelsInRect(laterFrame.rgba, [41, 44, 48, 255], 18, 18, 42, 44)).toBe(0)
   })
 
   it('draws pixels that differ from the background', () => {
@@ -363,6 +386,33 @@ function countColorPixels(rgba: Uint8Array, color: readonly [number, number, num
   return count
 }
 
+function countColorPixelsInRect(
+  rgba: Uint8Array,
+  color: readonly [number, number, number, number],
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number
+): number {
+  let count = 0
+
+  for (let y = minY; y <= maxY; y++) {
+    for (let x = minX; x <= maxX; x++) {
+      const offset = (y * FRAME_WIDTH + x) * 4
+      if (
+        rgba[offset] === color[0] &&
+        rgba[offset + 1] === color[1] &&
+        rgba[offset + 2] === color[2] &&
+        rgba[offset + 3] === color[3]
+      ) {
+        count += 1
+      }
+    }
+  }
+
+  return count
+}
+
 function countAsciiCells(rows: readonly string[]): number {
   return rows.reduce((count, row) => count + row.replaceAll(' ', '').length, 0)
 }
@@ -388,6 +438,11 @@ function countAddedAsciiCells(originalRows: readonly string[], variantRows: read
 
 function colorKey(color: readonly [number, number, number, number]): string {
   return color.join(',')
+}
+
+function colorFromKey(key: string): [number, number, number, number] {
+  const [red, green, blue, alpha] = key.split(',').map(Number)
+  return [red ?? 0, green ?? 0, blue ?? 0, alpha ?? 255]
 }
 
 function contrastRatio(

@@ -4,6 +4,12 @@ import { type Frame } from './render'
 const PALETTE: Palette = [
   [240, 239, 234],
   [41, 44, 48],
+  [72, 50, 112],
+  [31, 84, 94],
+  [118, 58, 43],
+  [54, 87, 50],
+  [39, 68, 132],
+  [103, 48, 88],
   [110, 116, 122],
   [176, 170, 160],
   [170, 64, 54],
@@ -29,7 +35,7 @@ export function encodeGif(frames: readonly Frame[]): Uint8Array {
       palette: PALETTE,
       delay: frame.delayMs,
       repeat: 0,
-      colorDepth: 3
+      colorDepth: 4
     })
   }
 

@@ -35,15 +35,23 @@ const TEXT = ASCII_ART_CHARACTER_COLORS[0] as RgbaColor
 const MUTED = [110, 116, 122, 255] as const
 const NOISE = [176, 170, 160, 255] as const
 const DUST = [211, 205, 196, 255] as const
+const TEMPORAL_SYMBOL_MIN_CONTRAST_RATIO = 4.5
+const TEMPORAL_WHEEL_SYMBOL_COLORS = ASCII_ART_CHARACTER_COLORS.filter(
+  (color) => contrastRatio(color, BACKGROUND) >= TEMPORAL_SYMBOL_MIN_CONTRAST_RATIO
+)
 
 const POINTER_CENTER_X = Math.round(FRAME_WIDTH / 2)
 const POINTER_CENTER_Y = Math.round(FRAME_HEIGHT / 2)
 const WHEEL_RADIUS_X = 206
 const WHEEL_RADIUS_Y = 206
-const WHEEL_LABEL_FONT_SIZE = 20
+const WHEEL_LABEL_FONT_SIZE_VARIANTS = [16, 17, 18] as const
 const WHEEL_LABEL_TRACKING = -2
+const WHEEL_SYMBOL_JITTER_X_PX = [-3, -2, -1, 0, 1, 2, 3] as const
+const WHEEL_SYMBOL_JITTER_Y_PX = [-1, 0, 1] as const
+const WHEEL_SYMBOL_ROTATION_DEGREES = [-7, -5, -3, 0, 3, 5, 7] as const
 const POINTER_INSET = 34
 const POINTER_ARROWHEAD_LENGTH = 14
+const TEMPORAL_START_MARKER_FRAMES = 6
 
 const TINY_ASCII_FONT: Record<string, readonly string[]> = {
   '!': ['010', '010', '010', '000', '010'],
@@ -133,25 +141,30 @@ function renderLegacySlideChallengeFrames(challenge: LegacySlideDisplayModel): F
 }
 
 function renderTemporalPointerFrames(challenge: TemporalPointerDisplayModel): Frame[] {
+  const symbolStyles = challenge.wheelSymbols.map((_symbol, symbolIndex) =>
+    temporalWheelSymbolStyle(challenge.seed, symbolIndex)
+  )
   const symbolArt = challenge.wheelSymbols.map((symbol, symbolIndex) =>
-    renderAsciiCodeArt(symbol, wheelSymbolFont(challenge.seed, symbolIndex))
+    renderAsciiCodeArt(symbol, symbolStyles[symbolIndex]!.font)
   )
 
-  return challenge.timeline.map((cue) => renderTemporalPointerFrame(challenge, symbolArt, cue))
+  return challenge.timeline.map((cue) => renderTemporalPointerFrame(challenge, symbolArt, symbolStyles, cue))
 }
 
 function renderTemporalPointerFrame(
   challenge: TemporalPointerDisplayModel,
   symbolArt: readonly AsciiCodeArt[],
+  symbolStyles: readonly TemporalWheelSymbolStyle[],
   cue: TemporalPointerFrameCue
 ): Frame {
   const rgba = new Uint8Array(FRAME_WIDTH * FRAME_HEIGHT * 4)
   const random = new SeededRandom(`${challenge.seed}:temporal-frame:${cue.frameIndex}`)
   prepareCanvas(rgba, random)
 
-  drawTemporalWheel(rgba, challenge, symbolArt, cue.frameIndex)
+  drawTemporalWheel(rgba, challenge, symbolArt, symbolStyles, cue.frameIndex)
   drawTemporalPointer(rgba, cue.pointerAngleDegrees)
   drawTemporalHub(rgba)
+  drawTemporalStartMarker(rgba, cue.frameIndex)
 
   return {
     width: FRAME_WIDTH,
@@ -245,29 +258,54 @@ function renderTransitionFrame(
   }
 }
 
-function wheelSymbolFont(seed: string, symbolIndex: number): AsciiArtFont {
+interface TemporalWheelSymbolStyle {
+  font: AsciiArtFont
+  offsetX: number
+  offsetY: number
+  rotationDegrees: number
+  color: RgbaColor
+}
+
+function temporalWheelSymbolStyle(seed: string, symbolIndex: number): TemporalWheelSymbolStyle {
+  const random = new SeededRandom(`${seed}:temporal-wheel-symbol-style:${symbolIndex}`)
   const selected = selectAsciiArtFont(seed, symbolIndex)
+  const fontSize = WHEEL_LABEL_FONT_SIZE_VARIANTS[random.nextInt(WHEEL_LABEL_FONT_SIZE_VARIANTS.length)] as number
+
   return {
-    ...selected,
-    name: `${selected.name}-wheel`,
-    fontSize: WHEEL_LABEL_FONT_SIZE,
-    tracking: WHEEL_LABEL_TRACKING
+    font: {
+      ...selected,
+      name: `${selected.name}-wheel`,
+      fontSize,
+      tracking: WHEEL_LABEL_TRACKING
+    },
+    offsetX: WHEEL_SYMBOL_JITTER_X_PX[random.nextInt(WHEEL_SYMBOL_JITTER_X_PX.length)] as number,
+    offsetY: WHEEL_SYMBOL_JITTER_Y_PX[random.nextInt(WHEEL_SYMBOL_JITTER_Y_PX.length)] as number,
+    rotationDegrees: WHEEL_SYMBOL_ROTATION_DEGREES[
+      random.nextInt(WHEEL_SYMBOL_ROTATION_DEGREES.length)
+    ] as number,
+    color: selectTemporalWheelColor(random)
   }
+}
+
+function selectTemporalWheelColor(random: SeededRandom): RgbaColor {
+  return TEMPORAL_WHEEL_SYMBOL_COLORS[random.nextInt(TEMPORAL_WHEEL_SYMBOL_COLORS.length)] ?? TEXT
 }
 
 function drawTemporalWheel(
   rgba: Uint8Array,
   challenge: TemporalPointerDisplayModel,
   symbolArt: readonly AsciiCodeArt[],
+  symbolStyles: readonly TemporalWheelSymbolStyle[],
   frameIndex: number
 ): void {
   for (let symbolIndex = 0; symbolIndex < challenge.wheelSymbols.length; symbolIndex++) {
     const art = symbolArt[symbolIndex]
-    if (!art) continue
+    const style = symbolStyles[symbolIndex]
+    if (!art || !style) continue
 
     const position = wheelSymbolPosition(symbolIndex, challenge.wheelSymbols.length, art)
     const frameArt = temporalSymbolArtForFrame(art, challenge, symbolIndex, frameIndex)
-    drawAsciiArtRows(rgba, frameArt, position.x, position.y, TEXT)
+    drawAsciiArtRowsTransformed(rgba, frameArt, position.x, position.y, TEXT, style)
   }
 }
 
@@ -343,15 +381,16 @@ function applyTemporalStrokeDropout(
   const dropoutCells = Math.min(maxDropoutCells, Math.max(0, visibleCells.length - minVisibleCells))
   if (dropoutCells <= 0) return
 
-  const scoredCells = visibleCells
-    .map((cell) => ({
-      cell,
-      score: temporalCellScore(seed, symbolIndex, frameIndex, 'dropout', cell)
-    }))
-    .sort((a, b) => a.score - b.score)
+  let cleared = 0
 
-  for (const { cell } of scoredCells.slice(0, dropoutCells)) {
+  for (const cell of visibleCells) {
+    if (cleared >= dropoutCells) break
+    if (temporalCellScore(seed, symbolIndex, frameIndex, 'dropout', cell) > TEMPORAL_SYMBOL_REAL_STROKE_DROPOUT_RATIO) {
+      continue
+    }
+
     rows[cell.row]![cell.col] = ' '
+    cleared += 1
   }
 }
 
@@ -437,6 +476,27 @@ function normalizedHash(value: string): number {
   return (hash >>> 0) / 0x100000000
 }
 
+function contrastRatio(
+  foreground: readonly [number, number, number, number],
+  background: readonly [number, number, number, number]
+): number {
+  const foregroundLuminance = relativeLuminance(foreground)
+  const backgroundLuminance = relativeLuminance(background)
+  const lighter = Math.max(foregroundLuminance, backgroundLuminance)
+  const darker = Math.min(foregroundLuminance, backgroundLuminance)
+  return (lighter + 0.05) / (darker + 0.05)
+}
+
+function relativeLuminance(color: readonly [number, number, number, number]): number {
+  const [red, green, blue] = color
+  const [r, g, b] = [red, green, blue].map((channel) => {
+    const normalized = channel / 255
+    return normalized <= 0.03928 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4
+  }) as [number, number, number]
+
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b
+}
+
 function drawTemporalPointer(rgba: Uint8Array, angleDegrees: number): void {
   const radians = degreesToRadians(angleDegrees)
   const radius = ellipseRadiusAtAngle(radians) - POINTER_INSET
@@ -461,6 +521,18 @@ function drawTemporalPointer(rgba: Uint8Array, angleDegrees: number): void {
 function drawTemporalHub(rgba: Uint8Array): void {
   fillCircle(rgba, POINTER_CENTER_X, POINTER_CENTER_Y, 7, DUST)
   fillCircle(rgba, POINTER_CENTER_X, POINTER_CENTER_Y, 3, MUTED)
+}
+
+function drawTemporalStartMarker(rgba: Uint8Array, frameIndex: number): void {
+  if (frameIndex >= TEMPORAL_START_MARKER_FRAMES) return
+
+  const x = 20
+  const y = 20
+  drawLine(rgba, x, y, x, y + 21, TEXT)
+  drawLine(rgba, x, y, x + 17, y + 5, TEXT)
+  drawLine(rgba, x + 17, y + 5, x, y + 10, TEXT)
+  drawLine(rgba, x + 3, y + 14, x + 14, y + 14, MUTED)
+  drawLine(rgba, x + 5, y + 18, x + 12, y + 18, MUTED)
 }
 
 function wheelSymbolPosition(
@@ -581,6 +653,41 @@ function drawAsciiArtRows(
         y + row * ASCII_ART_CELL_ADVANCE_Y,
         color
       )
+    }
+  }
+}
+
+function drawAsciiArtRowsTransformed(
+  rgba: Uint8Array,
+  art: AsciiCodeArt,
+  x: number,
+  y: number,
+  fallbackColor: RgbaColor,
+  style: TemporalWheelSymbolStyle
+): void {
+  const radians = degreesToRadians(style.rotationDegrees)
+  const sin = Math.sin(radians)
+  const cos = Math.cos(radians)
+  const centerX = x + style.offsetX + art.widthPx / 2
+  const centerY = y + style.offsetY + art.heightPx / 2
+
+  for (let row = 0; row < art.rows.length; row++) {
+    const symbols = art.rows[row] as string
+    const characterCells = art.characterCells[row] ?? []
+
+    for (let col = 0; col < symbols.length; col++) {
+      const symbol = symbols[col]
+      if (!symbol || symbol === ' ') continue
+      const characterIndex = characterCells[col] ?? -1
+      const color = style.color ?? art.characterStyles[characterIndex]?.color ?? fallbackColor
+      const cellX = x + style.offsetX + col * ASCII_ART_CELL_ADVANCE_X
+      const cellY = y + style.offsetY + row * ASCII_ART_CELL_ADVANCE_Y
+      const dx = cellX + TINY_GLYPH_WIDTH / 2 - centerX
+      const dy = cellY + TINY_GLYPH_HEIGHT / 2 - centerY
+      const rotatedX = centerX + dx * cos - dy * sin - TINY_GLYPH_WIDTH / 2
+      const rotatedY = centerY + dx * sin + dy * cos - TINY_GLYPH_HEIGHT / 2
+
+      drawTinySymbol(rgba, symbol, Math.round(rotatedX), Math.round(rotatedY), color)
     }
   }
 }

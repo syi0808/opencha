@@ -76,13 +76,13 @@ policy:
   reverify_on_push: false
 ```
 
-`challenge.code_count` controls the number of visible codes and accepts values from 3 to 7. Each generated code is independently randomized to 5 or 6 characters.
+`challenge.code_count` is accepted for compatibility with existing configuration. The default temporal challenge chooses a 5- or 6-symbol captured sequence.
 
 ## Challenge Flow
 
-The MVP challenge is a rasterized GIF. It renders a configurable number of unique mixed-case codes with independently randomized code lengths, bundled TTF fonts, lighter ASCII text-art glyphs, and slides from one code to the next without per-frame index markers or transition-only text color changes.
+The MVP challenge is a rasterized GIF. It renders ASCII-art symbols around a wheel while a center pointer rotates, briefly locks, and captures one pointed symbol at a time. The PR author watches the lock flashes and replies with the captured symbols in order.
 
-OpenCHA bundles Noto Sans Bold, Noto Serif Bold, Anton, and Oswald Bold TTF files for local font rasterization. The challenge renderer converts actual glyph outlines into ASCII density cells, and each displayed code can mix per-character fonts, sizes, readable colors, small rotations, baseline jitter, scaling, shear, modest overlap, and small cutouts before drawing the GIF.
+No single frame is intended to show the complete answer. Solving requires observing the animation timeline and combining multiple capture events. OpenCHA still bundles Noto Sans Bold, Noto Serif Bold, Anton, and Oswald Bold TTF files for local font rasterization, and the renderer converts glyph outlines into ASCII density cells before drawing the GIF.
 
 Untrusted PR authors reply to the challenge with:
 

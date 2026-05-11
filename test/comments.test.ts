@@ -5,7 +5,7 @@ import {
   renderPassComment,
   renderPassedChallengeComment
 } from '../src/state/comments'
-import type { ChallengePayload } from '../src/state/payload'
+import { parseChallengePayload, type ChallengePayload } from '../src/state/payload'
 
 describe('OpenCHA comments', () => {
   it('recovers persisted state from a rendered body', () => {
@@ -48,6 +48,44 @@ describe('OpenCHA comments', () => {
     expect(renderExceededComment({ ...payload, exceeded: true, attempts: 5 }, 'encrypted')).toContain(
       '## 🚫 OpenCHA needs a maintainer'
     )
+  })
+
+  it('renders temporal pointer challenge comments without ordinal target copy', () => {
+    const payload = sampleTemporalPayload()
+    const body = renderChallengeComment({
+      assetUrl: 'https://raw.githubusercontent.com/o/r/opencha-assets/pr-1/challenge-abc.gif',
+      payload,
+      encryptedPayload: 'encrypted',
+      now: new Date('2026-01-01T00:00:00.000Z')
+    })
+
+    expect(body).toContain('| Status | Challenge | Attempts |')
+    expect(body).toContain('Watch pointer locks')
+    expect(body).toContain('center lock flashes')
+    expect(body).toContain('/opencha answer YOUR_CODE')
+    expect(body).not.toContain('1st code')
+    expect(body).not.toContain('2nd code')
+    expect(body).not.toContain('3rd code')
+    expect(body).not.toContain('ABCDE')
+    expect(body).not.toContain(payload.answerHash)
+    expect(extractEncryptedPayload(body)).toBe('encrypted')
+  })
+
+  it('parses matching legacy and temporal payload versions only', () => {
+    expect(parseChallengePayload(samplePayload()).challengeVersion).toBe(1)
+    expect(parseChallengePayload(sampleTemporalPayload()).challengeVersion).toBe(2)
+    expect(() =>
+      parseChallengePayload({
+        ...sampleTemporalPayload(),
+        challengeParams: samplePayload().challengeParams
+      })
+    ).toThrow()
+    expect(() =>
+      parseChallengePayload({
+        ...samplePayload(),
+        challengeParams: sampleTemporalPayload().challengeParams
+      })
+    ).toThrow()
   })
 
   it('renders cooldown availability as an absolute UTC timestamp', () => {
@@ -96,6 +134,42 @@ function samplePayload(): ChallengePayload {
       charset: 'ABCDEFGHJKLMNPQRTUVWXY346789',
       noiseLevel: 'medium',
       targetIndex: 3
+    },
+    answerSalt: 'salt',
+    answerHash: 'hash',
+    attempts: 1,
+    maxAttempts: 5,
+    cooldownSeconds: 30,
+    cooldownUntil: null,
+    issuedAt: '2026-01-01T00:00:00.000Z',
+    passed: false,
+    passedAt: null,
+    passedBy: null,
+    passMethod: null,
+    draftedByOpencha: true,
+    asset: {
+      url: 'https://raw.githubusercontent.com/o/r/opencha-assets/pr-1/challenge-abc.gif',
+      assetRef: '{"backend":"branch","branch":"opencha-assets","path":"pr-1/challenge-abc.gif"}'
+    },
+    exceeded: false
+  }
+}
+
+function sampleTemporalPayload(): ChallengePayload {
+  return {
+    schema: 1,
+    challengeId: 'challenge',
+    challengeVersion: 2,
+    seed: 'seed',
+    challengeParams: {
+      kind: 'temporal-pointer',
+      codeLength: 5,
+      ringSize: 18,
+      captureCount: 5,
+      decoyPauseCount: 1,
+      frameDelayMs: 90,
+      charset: 'ABCDEFGHJKLMNPQRTUVWXY346789',
+      noiseLevel: 'medium'
     },
     answerSalt: 'salt',
     answerHash: 'hash',

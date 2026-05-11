@@ -2,13 +2,21 @@ import {
   ASCII_ART_CELL_ADVANCE_X,
   ASCII_ART_CELL_ADVANCE_Y,
   ASCII_ART_CHARACTER_COLORS,
+  type AsciiArtFont,
   type RgbaColor,
   type AsciiCodeArt,
   renderAsciiCodeArt,
   selectAsciiArtFont
 } from './ascii-art-fonts'
 import { SeededRandom } from './random'
-import { type ChallengeDisplayModel } from './types'
+import { temporalPointerSymbolAngleDegrees } from './temporal-pointer'
+import {
+  TEMPORAL_POINTER_CHALLENGE_VERSION,
+  type ChallengeDisplayModel,
+  type LegacySlideDisplayModel,
+  type TemporalPointerDisplayModel,
+  type TemporalPointerFrameCue
+} from './types'
 
 export interface Frame {
   width: number
@@ -27,6 +35,19 @@ const TEXT = ASCII_ART_CHARACTER_COLORS[0] as RgbaColor
 const MUTED = [110, 116, 122, 255] as const
 const NOISE = [176, 170, 160, 255] as const
 const DUST = [211, 205, 196, 255] as const
+const WHITE = [255, 255, 255, 255] as const
+export const TEMPORAL_POINTER_LOCK_COLOR = [170, 64, 54, 255] as const satisfies RgbaColor
+export const TEMPORAL_POINTER_PROGRESS_COLOR = TEXT
+
+const POINTER_CENTER_X = Math.round(FRAME_WIDTH / 2)
+const POINTER_CENTER_Y = Math.round(FRAME_HEIGHT / 2)
+const WHEEL_RADIUS_X = 292
+const WHEEL_RADIUS_Y = 82
+const WHEEL_LABEL_FONT_SIZE = 24
+const WHEEL_LABEL_TRACKING = -2
+const POINTER_INSET = 30
+const POINTER_ARROWHEAD_LENGTH = 14
+const PROGRESS_DOT_GAP = 18
 
 const TINY_ASCII_FONT: Record<string, readonly string[]> = {
   '!': ['010', '010', '010', '000', '010'],
@@ -75,6 +96,14 @@ const enum SlideDirection {
 }
 
 export function renderChallengeFrames(challenge: ChallengeDisplayModel): Frame[] {
+  if (challenge.version === TEMPORAL_POINTER_CHALLENGE_VERSION) {
+    return renderTemporalPointerFrames(challenge)
+  }
+
+  return renderLegacySlideChallengeFrames(challenge)
+}
+
+function renderLegacySlideChallengeFrames(challenge: LegacySlideDisplayModel): Frame[] {
   const frames: Frame[] = []
   const codeArt = challenge.codes.map((code, codeIndex) =>
     renderAsciiCodeArt(code, selectAsciiArtFont(challenge.seed, codeIndex), {
@@ -102,12 +131,42 @@ export function renderChallengeFrames(challenge: ChallengeDisplayModel): Frame[]
   return frames
 }
 
+function renderTemporalPointerFrames(challenge: TemporalPointerDisplayModel): Frame[] {
+  const symbolArt = challenge.wheelSymbols.map((symbol, symbolIndex) =>
+    renderAsciiCodeArt(symbol, wheelSymbolFont(challenge.seed, symbolIndex))
+  )
+
+  return challenge.timeline.map((cue) => renderTemporalPointerFrame(challenge, symbolArt, cue))
+}
+
+function renderTemporalPointerFrame(
+  challenge: TemporalPointerDisplayModel,
+  symbolArt: readonly AsciiCodeArt[],
+  cue: TemporalPointerFrameCue
+): Frame {
+  const rgba = new Uint8Array(FRAME_WIDTH * FRAME_HEIGHT * 4)
+  const random = new SeededRandom(`${challenge.seed}:temporal-frame:${cue.frameIndex}`)
+  prepareCanvas(rgba, random)
+
+  drawTemporalWheel(rgba, challenge, symbolArt, cue)
+  drawTemporalPointer(rgba, cue.pointerAngleDegrees)
+  drawTemporalProgress(rgba, challenge.params.captureCount, cue.completedCaptures)
+  drawTemporalCenterCue(rgba, cue)
+
+  return {
+    width: FRAME_WIDTH,
+    height: FRAME_HEIGHT,
+    rgba,
+    delayMs: challenge.params.frameDelayMs
+  }
+}
+
 export function hasTinyAsciiGlyph(symbol: string): boolean {
   return TINY_ASCII_FONT[symbol] !== undefined
 }
 
 function renderHoldFrame(
-  challenge: ChallengeDisplayModel,
+  challenge: LegacySlideDisplayModel,
   art: AsciiCodeArt,
   codeIndex: number,
   holdIndex: number
@@ -133,7 +192,7 @@ function renderHoldFrame(
 }
 
 function renderTransitionFrame(
-  challenge: ChallengeDisplayModel,
+  challenge: LegacySlideDisplayModel,
   sourceArt: AsciiCodeArt,
   targetArt: AsciiCodeArt,
   transitionIndex: number,
@@ -184,6 +243,123 @@ function renderTransitionFrame(
     rgba,
     delayMs: FRAME_DELAY_MS
   }
+}
+
+function wheelSymbolFont(seed: string, symbolIndex: number): AsciiArtFont {
+  const selected = selectAsciiArtFont(seed, symbolIndex)
+  return {
+    ...selected,
+    name: `${selected.name}-wheel`,
+    fontSize: WHEEL_LABEL_FONT_SIZE,
+    tracking: WHEEL_LABEL_TRACKING
+  }
+}
+
+function drawTemporalWheel(
+  rgba: Uint8Array,
+  challenge: TemporalPointerDisplayModel,
+  symbolArt: readonly AsciiCodeArt[],
+  cue: TemporalPointerFrameCue
+): void {
+  for (let symbolIndex = 0; symbolIndex < challenge.wheelSymbols.length; symbolIndex++) {
+    const art = symbolArt[symbolIndex]
+    if (!art) continue
+
+    const position = wheelSymbolPosition(symbolIndex, challenge.wheelSymbols.length, art)
+    if (symbolIndex === cue.pointedSymbolIndex) {
+      fillCircle(
+        rgba,
+        position.centerX,
+        position.centerY,
+        Math.max(14, Math.ceil(Math.max(art.widthPx, art.heightPx) / 2) + 4),
+        WHITE
+      )
+      drawWheelTick(rgba, symbolIndex, challenge.wheelSymbols.length, MUTED)
+    }
+
+    drawAsciiArtRows(rgba, art, position.x, position.y, TEXT)
+  }
+}
+
+function drawTemporalPointer(rgba: Uint8Array, angleDegrees: number): void {
+  const radians = degreesToRadians(angleDegrees)
+  const radius = ellipseRadiusAtAngle(radians) - POINTER_INSET
+  const tipX = POINTER_CENTER_X + Math.cos(radians) * radius
+  const tipY = POINTER_CENTER_Y + Math.sin(radians) * radius
+
+  drawLine(rgba, POINTER_CENTER_X, POINTER_CENTER_Y, Math.round(tipX), Math.round(tipY), TEXT)
+
+  for (const offset of [-0.72, 0.72]) {
+    const headAngle = radians + Math.PI + offset
+    drawLine(
+      rgba,
+      Math.round(tipX),
+      Math.round(tipY),
+      Math.round(tipX + Math.cos(headAngle) * POINTER_ARROWHEAD_LENGTH),
+      Math.round(tipY + Math.sin(headAngle) * POINTER_ARROWHEAD_LENGTH),
+      TEXT
+    )
+  }
+}
+
+function drawTemporalCenterCue(rgba: Uint8Array, cue: TemporalPointerFrameCue): void {
+  if (cue.kind === 'capture') {
+    const pulse = cue.frameIndex % 2 === 0 ? 2 : 0
+    fillCircle(rgba, POINTER_CENTER_X, POINTER_CENTER_Y, 13 + pulse, TEMPORAL_POINTER_LOCK_COLOR)
+    fillCircle(rgba, POINTER_CENTER_X, POINTER_CENTER_Y, 5, WHITE)
+    return
+  }
+
+  fillCircle(rgba, POINTER_CENTER_X, POINTER_CENTER_Y, cue.kind === 'near-miss' ? 9 : 7, DUST)
+  fillCircle(rgba, POINTER_CENTER_X, POINTER_CENTER_Y, 3, MUTED)
+}
+
+function drawTemporalProgress(rgba: Uint8Array, captureCount: number, completedCaptures: number): void {
+  const startX = POINTER_CENTER_X - Math.round(((captureCount - 1) * PROGRESS_DOT_GAP) / 2)
+  const y = FRAME_HEIGHT - 18
+
+  for (let index = 0; index < captureCount; index++) {
+    const color = index < completedCaptures ? TEMPORAL_POINTER_PROGRESS_COLOR : DUST
+    fillCircle(rgba, startX + index * PROGRESS_DOT_GAP, y, 5, color)
+  }
+}
+
+function drawWheelTick(
+  rgba: Uint8Array,
+  symbolIndex: number,
+  symbolCount: number,
+  color: RgbaColor
+): void {
+  const radians = degreesToRadians(temporalPointerSymbolAngleDegrees(symbolIndex, symbolCount))
+  const outerX = POINTER_CENTER_X + Math.cos(radians) * (ellipseRadiusAtAngle(radians) + 8)
+  const outerY = POINTER_CENTER_Y + Math.sin(radians) * (ellipseRadiusAtAngle(radians) + 8)
+  const innerX = POINTER_CENTER_X + Math.cos(radians) * (ellipseRadiusAtAngle(radians) - 8)
+  const innerY = POINTER_CENTER_Y + Math.sin(radians) * (ellipseRadiusAtAngle(radians) - 8)
+
+  drawLine(rgba, Math.round(innerX), Math.round(innerY), Math.round(outerX), Math.round(outerY), color)
+}
+
+function wheelSymbolPosition(
+  symbolIndex: number,
+  symbolCount: number,
+  art: AsciiCodeArt
+): { x: number; y: number; centerX: number; centerY: number } {
+  const radians = degreesToRadians(temporalPointerSymbolAngleDegrees(symbolIndex, symbolCount))
+  const centerX = Math.round(POINTER_CENTER_X + Math.cos(radians) * WHEEL_RADIUS_X)
+  const centerY = Math.round(POINTER_CENTER_Y + Math.sin(radians) * WHEEL_RADIUS_Y)
+
+  return {
+    x: Math.round(centerX - art.widthPx / 2),
+    y: Math.round(centerY - art.heightPx / 2),
+    centerX,
+    centerY
+  }
+}
+
+function ellipseRadiusAtAngle(radians: number): number {
+  const cos = Math.cos(radians)
+  const sin = Math.sin(radians)
+  return 1 / Math.sqrt((cos * cos) / (WHEEL_RADIUS_X * WHEEL_RADIUS_X) + (sin * sin) / (WHEEL_RADIUS_Y * WHEEL_RADIUS_Y))
 }
 
 function prepareCanvas(rgba: Uint8Array, random: SeededRandom): void {
@@ -326,6 +502,30 @@ function slideDirection(seed: string, transitionIndex: number): SlideDirection {
 
 function easeInOut(value: number): number {
   return value < 0.5 ? 2 * value * value : 1 - Math.pow(-2 * value + 2, 2) / 2
+}
+
+function degreesToRadians(value: number): number {
+  return (value * Math.PI) / 180
+}
+
+function fillCircle(
+  rgba: Uint8Array,
+  centerX: number,
+  centerY: number,
+  radius: number,
+  color: readonly [number, number, number, number]
+): void {
+  const radiusSquared = radius * radius
+
+  for (let y = centerY - radius; y <= centerY + radius; y++) {
+    for (let x = centerX - radius; x <= centerX + radius; x++) {
+      const dx = x - centerX
+      const dy = y - centerY
+      if (dx * dx + dy * dy <= radiusSquared) {
+        setPixel(rgba, x, y, color)
+      }
+    }
+  }
 }
 
 function fillRect(

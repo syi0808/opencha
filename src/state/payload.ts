@@ -4,6 +4,10 @@ import {
   CODE_COUNT_MIN,
   CODE_LENGTH_MAX,
   CODE_LENGTH_MIN,
+  CHALLENGE_CHARSET,
+  LEGACY_SLIDE_CHALLENGE_VERSION,
+  TEMPORAL_POINTER_CHALLENGE_VERSION,
+  TEMPORAL_POINTER_KIND,
   TARGET_INDEX_MIN
 } from '../challenge/types'
 import { ConfigError } from '../errors'
@@ -20,61 +24,91 @@ const isoDate = z.string().refine((value) => !Number.isNaN(Date.parse(value)), {
   message: 'Expected ISO timestamp'
 })
 
+const legacySlideParamsSchema = z.object({
+  length: z.number().int().min(CODE_LENGTH_MIN).max(CODE_LENGTH_MAX).optional(),
+  codeCount: z.number().int().min(CODE_COUNT_MIN).max(CODE_COUNT_MAX).optional(),
+  codeLengths: z
+    .array(z.number().int().min(CODE_LENGTH_MIN).max(CODE_LENGTH_MAX))
+    .min(CODE_COUNT_MIN)
+    .max(CODE_COUNT_MAX)
+    .optional(),
+  decoyCount: z
+    .number()
+    .int()
+    .min(LEGACY_RANDOM_CODE_COUNT_DECOY_MIN)
+    .max(LEGACY_RANDOM_CODE_COUNT_DECOY_MAX),
+  animationFrames: z.number().int().min(8).max(32),
+  charset: z.string().min(1),
+  noiseLevel: z.literal('medium'),
+  targetIndex: z.number().int().min(TARGET_INDEX_MIN).max(legacyOrCurrentCodeCountMax)
+}).superRefine((params, context) => {
+  if (params.length === undefined && params.codeLengths === undefined) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Expected either legacy length or per-code lengths'
+    })
+  }
+
+  if (params.codeCount !== undefined && params.decoyCount !== params.codeCount - 1) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Expected decoyCount to match codeCount - 1'
+    })
+  }
+
+  if (
+    params.codeCount !== undefined &&
+    params.codeLengths !== undefined &&
+    params.codeLengths.length !== params.codeCount
+  ) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Expected codeLengths length to match codeCount'
+    })
+  }
+
+  if (params.codeCount !== undefined && params.targetIndex > params.codeCount) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Expected targetIndex to be within codeCount'
+    })
+  }
+})
+
+const temporalPointerParamsSchema = z.object({
+  kind: z.literal(TEMPORAL_POINTER_KIND),
+  codeLength: z.number().int().min(CODE_LENGTH_MIN).max(CODE_LENGTH_MAX),
+  ringSize: z.number().int().min(12).max(24),
+  captureCount: z.number().int().min(CODE_LENGTH_MIN).max(CODE_LENGTH_MAX),
+  decoyPauseCount: z.number().int().min(0).max(3),
+  frameDelayMs: z.number().int().min(60).max(140),
+  charset: z.literal(CHALLENGE_CHARSET),
+  noiseLevel: z.literal('medium')
+}).superRefine((params, context) => {
+  if (params.captureCount !== params.codeLength) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Expected captureCount to match codeLength'
+    })
+  }
+
+  if (params.ringSize <= params.codeLength) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Expected ringSize to exceed codeLength'
+    })
+  }
+})
+
 export const challengePayloadSchema = z.object({
   schema: z.literal(1),
   challengeId: z.string().min(1),
-  challengeVersion: z.literal(1),
+  challengeVersion: z.union([
+    z.literal(LEGACY_SLIDE_CHALLENGE_VERSION),
+    z.literal(TEMPORAL_POINTER_CHALLENGE_VERSION)
+  ]),
   seed: z.string().min(1),
-  challengeParams: z.object({
-    length: z.number().int().min(CODE_LENGTH_MIN).max(CODE_LENGTH_MAX).optional(),
-    codeCount: z.number().int().min(CODE_COUNT_MIN).max(CODE_COUNT_MAX).optional(),
-    codeLengths: z
-      .array(z.number().int().min(CODE_LENGTH_MIN).max(CODE_LENGTH_MAX))
-      .min(CODE_COUNT_MIN)
-      .max(CODE_COUNT_MAX)
-      .optional(),
-    decoyCount: z
-      .number()
-      .int()
-      .min(LEGACY_RANDOM_CODE_COUNT_DECOY_MIN)
-      .max(LEGACY_RANDOM_CODE_COUNT_DECOY_MAX),
-    animationFrames: z.number().int().min(8).max(32),
-    charset: z.string().min(1),
-    noiseLevel: z.literal('medium'),
-    targetIndex: z.number().int().min(TARGET_INDEX_MIN).max(legacyOrCurrentCodeCountMax)
-  }).superRefine((params, context) => {
-    if (params.length === undefined && params.codeLengths === undefined) {
-      context.addIssue({
-        code: 'custom',
-        message: 'Expected either legacy length or per-code lengths'
-      })
-    }
-
-    if (params.codeCount !== undefined && params.decoyCount !== params.codeCount - 1) {
-      context.addIssue({
-        code: 'custom',
-        message: 'Expected decoyCount to match codeCount - 1'
-      })
-    }
-
-    if (
-      params.codeCount !== undefined &&
-      params.codeLengths !== undefined &&
-      params.codeLengths.length !== params.codeCount
-    ) {
-      context.addIssue({
-        code: 'custom',
-        message: 'Expected codeLengths length to match codeCount'
-      })
-    }
-
-    if (params.codeCount !== undefined && params.targetIndex > params.codeCount) {
-      context.addIssue({
-        code: 'custom',
-        message: 'Expected targetIndex to be within codeCount'
-      })
-    }
-  }),
+  challengeParams: z.union([legacySlideParamsSchema, temporalPointerParamsSchema]),
   answerSalt: z.string().min(1),
   answerHash: z.string().min(1),
   attempts: z.number().int().min(0),
@@ -92,6 +126,25 @@ export const challengePayloadSchema = z.object({
     assetRef: z.string().min(1)
   }).nullable(),
   exceeded: z.boolean()
+}).superRefine((payload, context) => {
+  const isTemporalParams =
+    'kind' in payload.challengeParams && payload.challengeParams.kind === TEMPORAL_POINTER_KIND
+
+  if (payload.challengeVersion === LEGACY_SLIDE_CHALLENGE_VERSION && isTemporalParams) {
+    context.addIssue({
+      code: 'custom',
+      path: ['challengeParams'],
+      message: 'Expected legacy slide params for challengeVersion 1'
+    })
+  }
+
+  if (payload.challengeVersion === TEMPORAL_POINTER_CHALLENGE_VERSION && !isTemporalParams) {
+    context.addIssue({
+      code: 'custom',
+      path: ['challengeParams'],
+      message: 'Expected temporal pointer params for challengeVersion 2'
+    })
+  }
 })
 
 export type ChallengePayload = z.infer<typeof challengePayloadSchema>

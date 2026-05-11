@@ -4,7 +4,7 @@ import { handleIssueCommentEvent } from '../src/app/comment-flow'
 import { handlePullRequestEvent } from '../src/app/pr-flow'
 import { loadChallengeState } from '../src/app/state'
 import { createChallenge } from '../src/challenge/generate'
-import { CODE_COUNT_DEFAULT } from '../src/challenge/types'
+import { TEMPORAL_POINTER_CHALLENGE_VERSION, TEMPORAL_POINTER_KIND } from '../src/challenge/types'
 import type { CheckRunInput, GitHubGateway, IssueComment, PullRequestInfo, RepositoryPermission } from '../src/github/gateway'
 
 describe('OpenCHA flows', () => {
@@ -35,8 +35,7 @@ describe('OpenCHA flows', () => {
 
     const answer = createChallenge({
       seed: state.payload.seed,
-      answerSalt: state.payload.answerSalt,
-      codeCount: state.payload.challengeParams.codeCount ?? CODE_COUNT_DEFAULT
+      answerSalt: state.payload.answerSalt
     }).display.answer
 
     const answerComment = await gateway.createIssueComment('owner', 'repo', 1, `/opencha answer ${answer}`)
@@ -88,7 +87,7 @@ describe('OpenCHA flows', () => {
 
   })
 
-  it('uses configured code count when issuing a challenge', async () => {
+  it('issues temporal pointer challenges when legacy code count config is present', async () => {
     const gateway = new FakeGateway({ config: 'challenge:\n  code_count: 7\n' })
     const report = new ActionRunReport()
 
@@ -97,9 +96,15 @@ describe('OpenCHA flows', () => {
     const state = await loadChallengeState(gateway, inputs, gateway.pr)
     expect(state.kind).toBe('active')
     if (state.kind !== 'active') throw new Error('expected active state')
-    expect(state.payload.challengeParams.codeCount).toBe(7)
-    expect(state.payload.challengeParams.codeLengths).toHaveLength(7)
-    expect(state.payload.challengeParams.decoyCount).toBe(6)
+    expect(state.payload.challengeVersion).toBe(TEMPORAL_POINTER_CHALLENGE_VERSION)
+    if (!('kind' in state.payload.challengeParams)) {
+      throw new Error('expected temporal pointer params')
+    }
+    expect(state.payload.challengeParams).toMatchObject({
+      kind: TEMPORAL_POINTER_KIND,
+      ringSize: 18
+    })
+    expect(state.payload.challengeParams.captureCount).toBe(state.payload.challengeParams.codeLength)
   })
 
   it('requires maintainer after max attempts', async () => {
@@ -169,8 +174,7 @@ describe('OpenCHA flows', () => {
 
     const answer = createChallenge({
       seed: state.payload.seed,
-      answerSalt: state.payload.answerSalt,
-      codeCount: state.payload.challengeParams.codeCount ?? CODE_COUNT_DEFAULT
+      answerSalt: state.payload.answerSalt
     }).display.answer
 
     await handleIssueCommentEvent({

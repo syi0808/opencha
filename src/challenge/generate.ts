@@ -1,10 +1,10 @@
 import { randomBytes } from 'node:crypto'
 import { hashAnswer, normalizeAnswer } from './answer'
 import { SeededRandom } from './random'
+import { createTemporalPointerDisplay } from './temporal-pointer'
 import {
   ANIMATION_FRAMES,
   CHALLENGE_CHARSET,
-  CHALLENGE_VERSION,
   CODE_COUNT_DEFAULT,
   CODE_LENGTH_MAX,
   CODE_LENGTH_MIN,
@@ -16,6 +16,23 @@ import {
 } from './types'
 
 export function createChallenge(options: CreateChallengeOptions = {}): GeneratedChallenge {
+  const seed = options.seed ?? randomBytes(16).toString('base64url')
+  const answerSalt = options.answerSalt ?? randomBytes(16).toString('base64url')
+  const display = createTemporalPointerDisplay({ seed })
+
+  return {
+    display,
+    payload: {
+      challengeVersion: display.version,
+      seed,
+      challengeParams: display.params,
+      answerSalt,
+      answerHash: hashAnswer(display.answer, answerSalt)
+    }
+  }
+}
+
+export function createLegacySlideChallenge(options: CreateChallengeOptions = {}): GeneratedChallenge {
   const seed = options.seed ?? randomBytes(16).toString('base64url')
   const answerSalt = options.answerSalt ?? randomBytes(16).toString('base64url')
   const random = new SeededRandom(seed)
@@ -35,7 +52,7 @@ export function createChallenge(options: CreateChallengeOptions = {}): Generated
 
   return {
     display: {
-      version: CHALLENGE_VERSION,
+      version: 1,
       seed,
       codes,
       targetIndex,
@@ -43,7 +60,7 @@ export function createChallenge(options: CreateChallengeOptions = {}): Generated
       params
     },
     payload: {
-      challengeVersion: CHALLENGE_VERSION,
+      challengeVersion: 1,
       seed,
       challengeParams: params,
       answerSalt,

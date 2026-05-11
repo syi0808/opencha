@@ -8,15 +8,23 @@ import {
   renderAsciiCodeArt,
   selectAsciiArtFont
 } from '../../src/challenge/ascii-art-fonts'
-import { createChallenge } from '../../src/challenge/generate'
+import { createChallenge, createLegacySlideChallenge } from '../../src/challenge/generate'
 import {
   CODE_HOLD_FRAMES,
   FRAME_HEIGHT,
   FRAME_WIDTH,
+  TEMPORAL_POINTER_LOCK_COLOR,
   hasTinyAsciiGlyph,
   renderChallengeFrames
 } from '../../src/challenge/render'
-import { ANIMATION_FRAMES, CHALLENGE_CHARSET, CODE_LENGTH_MAX } from '../../src/challenge/types'
+import { visibleStringsForTemporalPointerFrame } from '../../src/challenge/temporal-pointer'
+import {
+  ANIMATION_FRAMES,
+  CHALLENGE_CHARSET,
+  CODE_LENGTH_MAX,
+  LEGACY_SLIDE_CHALLENGE_VERSION,
+  TEMPORAL_POINTER_CHALLENGE_VERSION
+} from '../../src/challenge/types'
 
 describe('challenge renderer', () => {
   it('bundles the TTF font files used by the renderer', () => {
@@ -190,7 +198,10 @@ describe('challenge renderer', () => {
   })
 
   it('renders stable non-empty frame arrays', () => {
-    const challenge = createChallenge({ seed: 'render-seed', answerSalt: 'salt' }).display
+    const challenge = createLegacySlideChallenge({ seed: 'render-seed', answerSalt: 'salt' }).display
+    if (challenge.version !== LEGACY_SLIDE_CHALLENGE_VERSION) {
+      throw new Error('expected legacy slide display')
+    }
     const frames = renderChallengeFrames(challenge)
 
     expect(ANIMATION_FRAMES).toBeGreaterThan(8)
@@ -207,25 +218,67 @@ describe('challenge renderer', () => {
     }
   })
 
-  it('draws pixels that differ from the background', () => {
-    const challenge = createChallenge({ seed: 'nonblank-seed', answerSalt: 'salt' }).display
-    const [frame] = renderChallengeFrames(challenge)
-    expect(frame).toBeDefined()
-
-    const rgba = frame!.rgba
-    let changed = 0
-
-    for (let i = 0; i < rgba.length; i += 4) {
-      if (rgba[i] !== 240 || rgba[i + 1] !== 239 || rgba[i + 2] !== 234 || rgba[i + 3] !== 255) {
-        changed += 1
-      }
+  it('renders temporal pointer frames from the generated timeline', () => {
+    const challenge = createChallenge({ seed: 'temporal-render-seed', answerSalt: 'salt' }).display
+    if (challenge.version !== TEMPORAL_POINTER_CHALLENGE_VERSION) {
+      throw new Error('expected temporal pointer display')
     }
 
-    expect(changed).toBeGreaterThan(100)
+    const frames = renderChallengeFrames(challenge)
+    expect(frames).toHaveLength(challenge.timeline.length)
+
+    for (const frame of frames) {
+      expect(frame.width).toBe(FRAME_WIDTH)
+      expect(frame.height).toBe(FRAME_HEIGHT)
+      expect(frame.rgba).toHaveLength(FRAME_WIDTH * FRAME_HEIGHT * 4)
+      expect(frame.delayMs).toBe(challenge.params.frameDelayMs)
+    }
+  })
+
+  it('draws pixels that differ from the background', () => {
+    const challenge = createChallenge({ seed: 'nonblank-seed', answerSalt: 'salt' }).display
+    if (challenge.version !== TEMPORAL_POINTER_CHALLENGE_VERSION) {
+      throw new Error('expected temporal pointer display')
+    }
+
+    const frames = renderChallengeFrames(challenge)
+    const captureIndex = challenge.timeline.findIndex((cue) => cue.kind === 'capture')
+    const sampleIndexes = [0, Math.floor(frames.length / 2), captureIndex]
+
+    for (const index of sampleIndexes) {
+      const frame = frames[index]
+      expect(frame, `frame ${index}`).toBeDefined()
+      expect(countChangedPixels(frame!.rgba), `changed pixels for frame ${index}`).toBeGreaterThan(100)
+    }
+  })
+
+  it('draws temporal capture cues without drawing the answer sequence', () => {
+    const challenge = createChallenge({ seed: 'temporal-cue-seed', answerSalt: 'salt' }).display
+    if (challenge.version !== TEMPORAL_POINTER_CHALLENGE_VERSION) {
+      throw new Error('expected temporal pointer display')
+    }
+
+    const frames = renderChallengeFrames(challenge)
+    const captureFrameIndex = challenge.timeline.findIndex((cue) => cue.kind === 'capture')
+    const nearMissFrameIndex = challenge.timeline.findIndex((cue) => cue.kind === 'near-miss')
+
+    expect(captureFrameIndex).toBeGreaterThanOrEqual(0)
+    expect(nearMissFrameIndex).toBeGreaterThanOrEqual(0)
+    expect(countColorPixels(frames[captureFrameIndex]!.rgba, TEMPORAL_POINTER_LOCK_COLOR)).toBeGreaterThan(20)
+    expect(countColorPixels(frames[nearMissFrameIndex]!.rgba, TEMPORAL_POINTER_LOCK_COLOR)).toBe(0)
+
+    for (const cue of challenge.timeline) {
+      for (const visible of visibleStringsForTemporalPointerFrame(challenge, cue)) {
+        expect(visible).not.toContain(challenge.answer)
+      }
+    }
   })
 
   it('draws seeded challenge text with multiple readable character colors', () => {
-    const challenge = createChallenge({ seed: 'frame-color-seed', answerSalt: 'salt' }).display
+    const challenge = createLegacySlideChallenge({ seed: 'frame-color-seed', answerSalt: 'salt' }).display
+    if (challenge.version !== LEGACY_SLIDE_CHALLENGE_VERSION) {
+      throw new Error('expected legacy slide display')
+    }
     const [frame] = renderChallengeFrames(challenge)
     if (!frame) throw new Error('expected at least one frame')
 
@@ -240,6 +293,30 @@ describe('challenge renderer', () => {
     expect(seenTextColors.size).toBeGreaterThan(1)
   })
 })
+
+function countChangedPixels(rgba: Uint8Array): number {
+  let changed = 0
+
+  for (let i = 0; i < rgba.length; i += 4) {
+    if (rgba[i] !== 240 || rgba[i + 1] !== 239 || rgba[i + 2] !== 234 || rgba[i + 3] !== 255) {
+      changed += 1
+    }
+  }
+
+  return changed
+}
+
+function countColorPixels(rgba: Uint8Array, color: readonly [number, number, number, number]): number {
+  let count = 0
+
+  for (let i = 0; i < rgba.length; i += 4) {
+    if (rgba[i] === color[0] && rgba[i + 1] === color[1] && rgba[i + 2] === color[2] && rgba[i + 3] === color[3]) {
+      count += 1
+    }
+  }
+
+  return count
+}
 
 function colorKey(color: readonly [number, number, number, number]): string {
   return color.join(',')

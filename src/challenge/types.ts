@@ -1,4 +1,7 @@
-export const CHALLENGE_VERSION = 1
+export const LEGACY_SLIDE_CHALLENGE_VERSION = 1
+export const TEMPORAL_POINTER_CHALLENGE_VERSION = 2
+export const CHALLENGE_VERSION = TEMPORAL_POINTER_CHALLENGE_VERSION
+export const TEMPORAL_POINTER_KIND = 'temporal-pointer'
 export const CHALLENGE_CHARSET = 'ABCDEFGHJKLMNPQRTUVWXY346789'
 export const CODE_LENGTH_MIN = 5
 export const CODE_LENGTH_MAX = 6
@@ -10,11 +13,13 @@ export const TARGET_INDEX_MIN = 2
 export const TARGET_INDEX_MAX = CODE_COUNT_MAX
 export const NOISE_LEVEL = 'medium'
 
-export type ChallengeVersion = typeof CHALLENGE_VERSION
+export type LegacySlideChallengeVersion = typeof LEGACY_SLIDE_CHALLENGE_VERSION
+export type TemporalPointerChallengeVersion = typeof TEMPORAL_POINTER_CHALLENGE_VERSION
+export type ChallengeVersion = LegacySlideChallengeVersion | TemporalPointerChallengeVersion
 export type ChallengeNoiseLevel = typeof NOISE_LEVEL
 
-export interface ChallengeParams {
-  codeCount: number
+export interface LegacySlideChallengeParams {
+  codeCount?: number
   codeLengths: number[]
   length?: number
   decoyCount: number
@@ -24,14 +29,48 @@ export interface ChallengeParams {
   targetIndex: number
 }
 
-export interface ChallengeDisplayModel {
-  version: ChallengeVersion
+export interface TemporalPointerChallengeParams {
+  kind: typeof TEMPORAL_POINTER_KIND
+  codeLength: number
+  ringSize: number
+  captureCount: number
+  decoyPauseCount: number
+  frameDelayMs: number
+  charset: typeof CHALLENGE_CHARSET
+  noiseLevel: ChallengeNoiseLevel
+}
+
+export type ChallengeParams = LegacySlideChallengeParams | TemporalPointerChallengeParams
+
+export interface TemporalPointerFrameCue {
+  frameIndex: number
+  pointerAngleDegrees: number
+  pointedSymbolIndex: number
+  kind: 'rotation' | 'near-miss' | 'capture'
+  captureIndex: number | null
+  completedCaptures: number
+}
+
+export interface LegacySlideDisplayModel {
+  version: LegacySlideChallengeVersion
   seed: string
   codes: string[]
   targetIndex: number
   answer: string
-  params: ChallengeParams
+  params: LegacySlideChallengeParams
 }
+
+export interface TemporalPointerDisplayModel {
+  version: TemporalPointerChallengeVersion
+  kind: typeof TEMPORAL_POINTER_KIND
+  seed: string
+  answer: string
+  wheelSymbols: string[]
+  timeline: TemporalPointerFrameCue[]
+  params: TemporalPointerChallengeParams
+}
+
+export type ChallengeDisplayModel = LegacySlideDisplayModel | TemporalPointerDisplayModel
 
 export interface ChallengePayloadFields {
   challengeVersion: ChallengeVersion

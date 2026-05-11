@@ -1,15 +1,17 @@
 import { normalizeAnswer, verifyAnswer } from '../../src/challenge/answer'
-import { createChallenge } from '../../src/challenge/generate'
+import { createChallenge, createLegacySlideChallenge } from '../../src/challenge/generate'
 import {
   ANIMATION_FRAMES,
   CHALLENGE_CHARSET,
-  CHALLENGE_VERSION,
   CODE_COUNT_DEFAULT,
   CODE_COUNT_MAX,
   CODE_COUNT_MIN,
   CODE_LENGTH_MAX,
   CODE_LENGTH_MIN,
+  LEGACY_SLIDE_CHALLENGE_VERSION,
+  type LegacySlideChallengeParams,
   NOISE_LEVEL,
+  TEMPORAL_POINTER_CHALLENGE_VERSION,
   TARGET_INDEX_MAX,
   TARGET_INDEX_MIN
 } from '../../src/challenge/types'
@@ -26,20 +28,24 @@ describe('createChallenge', () => {
     const first = createChallenge({ seed: 'fixed-seed-a', answerSalt: 'salt' })
     const second = createChallenge({ seed: 'fixed-seed-b', answerSalt: 'salt' })
 
-    expect(first.display.codes).not.toEqual(second.display.codes)
+    expect(first.display.answer).not.toEqual(second.display.answer)
+    expect(first.payload.challengeVersion).toBe(TEMPORAL_POINTER_CHALLENGE_VERSION)
   })
 
-  it('uses the allowed mixed-case charset, default code count, and unique per-code lengths', () => {
-    const challenge = createChallenge({ seed: 'charset-seed', answerSalt: 'salt' })
+  it('keeps legacy slide generation available with mixed-case codes and unique per-code lengths', () => {
+    const challenge = createLegacySlideChallenge({ seed: 'charset-seed', answerSalt: 'salt' })
     const allowed = new RegExp(`^[${CHALLENGE_CHARSET}${CHALLENGE_CHARSET.toLowerCase()}]+$`)
+
+    expect(challenge.display.version).toBe(LEGACY_SLIDE_CHALLENGE_VERSION)
+    if (challenge.display.version !== LEGACY_SLIDE_CHALLENGE_VERSION) {
+      throw new Error('expected legacy slide display')
+    }
 
     expect(challenge.display.codes).toHaveLength(CODE_COUNT_DEFAULT)
     expect(new Set(challenge.display.codes).size).toBe(challenge.display.codes.length)
     expect(new Set(challenge.display.codes.map(normalizeAnswer)).size).toBe(challenge.display.codes.length)
-    expect(challenge.payload.challengeParams.codeCount).toBe(CODE_COUNT_DEFAULT)
-    expect(challenge.payload.challengeParams.codeLengths).toEqual(
-      challenge.display.codes.map((code) => code.length)
-    )
+    expect(legacyParams(challenge).codeCount).toBe(CODE_COUNT_DEFAULT)
+    expect(legacyParams(challenge).codeLengths).toEqual(challenge.display.codes.map((code) => code.length))
 
     for (const code of challenge.display.codes) {
       expect(code.length).toBeGreaterThanOrEqual(CODE_LENGTH_MIN)
@@ -51,27 +57,33 @@ describe('createChallenge', () => {
   })
 
   it('accepts configurable visible code count', () => {
-    const challenge = createChallenge({ seed: 'count-seed', answerSalt: 'salt', codeCount: CODE_COUNT_MAX })
+    const challenge = createLegacySlideChallenge({ seed: 'count-seed', answerSalt: 'salt', codeCount: CODE_COUNT_MAX })
+    if (challenge.display.version !== LEGACY_SLIDE_CHALLENGE_VERSION) {
+      throw new Error('expected legacy slide display')
+    }
 
     expect(challenge.display.codes).toHaveLength(CODE_COUNT_MAX)
-    expect(challenge.payload.challengeParams.codeCount).toBe(CODE_COUNT_MAX)
-    expect(challenge.payload.challengeParams.decoyCount).toBe(CODE_COUNT_MAX - 1)
+    expect(legacyParams(challenge).codeCount).toBe(CODE_COUNT_MAX)
+    expect(legacyParams(challenge).decoyCount).toBe(CODE_COUNT_MAX - 1)
   })
 
   it('varies code length independently within challenges', () => {
     let sawMixedLengths = false
 
     for (let i = 0; i < 64; i++) {
-      const challenge = createChallenge({
+      const challenge = createLegacySlideChallenge({
         seed: `length-seed-${i}`,
         answerSalt: 'salt',
         codeCount: CODE_COUNT_MAX
       })
+      if (challenge.display.version !== LEGACY_SLIDE_CHALLENGE_VERSION) {
+        throw new Error('expected legacy slide display')
+      }
       const lengths = challenge.display.codes.map((code) => code.length)
 
       expect(challenge.display.codes).toHaveLength(CODE_COUNT_MAX)
-      expect(challenge.payload.challengeParams.codeLengths).toEqual(lengths)
-      expect(challenge.payload.challengeParams.decoyCount).toBe(CODE_COUNT_MAX - 1)
+      expect(legacyParams(challenge).codeLengths).toEqual(lengths)
+      expect(legacyParams(challenge).decoyCount).toBe(CODE_COUNT_MAX - 1)
 
       for (const length of lengths) {
         expect(length).toBeGreaterThanOrEqual(CODE_LENGTH_MIN)
@@ -87,7 +99,10 @@ describe('createChallenge', () => {
   })
 
   it('sets target index, params, and answer hash payload fields', () => {
-    const challenge = createChallenge({ seed: 'params-seed', answerSalt: 'salt', codeCount: CODE_COUNT_MIN })
+    const challenge = createLegacySlideChallenge({ seed: 'params-seed', answerSalt: 'salt', codeCount: CODE_COUNT_MIN })
+    if (challenge.display.version !== LEGACY_SLIDE_CHALLENGE_VERSION) {
+      throw new Error('expected legacy slide display')
+    }
 
     expect(challenge.display.targetIndex).toBeGreaterThanOrEqual(TARGET_INDEX_MIN)
     expect(challenge.display.targetIndex).toBeLessThanOrEqual(TARGET_INDEX_MAX)
@@ -106,6 +121,16 @@ describe('createChallenge', () => {
       noiseLevel: NOISE_LEVEL,
       targetIndex: challenge.display.targetIndex
     })
-    expect(challenge.payload.challengeVersion).toBe(CHALLENGE_VERSION)
+    expect(challenge.payload.challengeVersion).toBe(LEGACY_SLIDE_CHALLENGE_VERSION)
   })
 })
+
+function legacyParams(challenge: ReturnType<typeof createLegacySlideChallenge>): LegacySlideChallengeParams {
+  if (challenge.payload.challengeVersion !== LEGACY_SLIDE_CHALLENGE_VERSION) {
+    throw new Error('expected legacy slide payload')
+  }
+  if ('kind' in challenge.payload.challengeParams) {
+    throw new Error('expected legacy slide params')
+  }
+  return challenge.payload.challengeParams
+}

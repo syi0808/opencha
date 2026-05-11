@@ -280,7 +280,6 @@ async function updateChallengeComment(
   const encrypted = encryptPayload(payload, input.inputs, pr)
   await input.gateway.updateIssueComment(pr.baseOwner, pr.baseRepo, comment.id, renderChallengeComment({
     assetUrl: payload.asset?.url ?? '',
-    targetIndex: payload.challengeParams.targetIndex,
     payload,
     encryptedPayload: encrypted,
     now

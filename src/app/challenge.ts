@@ -69,7 +69,6 @@ export async function issueChallenge(input: {
   const encrypted = encryptPayload(payload, input.inputs, input.pr)
   const body = renderChallengeComment({
     assetUrl: asset.url,
-    targetIndex: payload.challengeParams.targetIndex,
     payload,
     encryptedPayload: encrypted,
     now

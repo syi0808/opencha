@@ -1,3 +1,4 @@
+import { TEMPORAL_POINTER_CHALLENGE_VERSION, TEMPORAL_POINTER_KIND } from '../challenge/types'
 import { StateRecordError } from '../errors'
 import { aux, fmt, scan } from './format'
 import { attemptsRemaining, type ChallengePayload } from './payload'
@@ -14,7 +15,7 @@ const NOTE_BLOCK = [
 
 export interface ChallengeCommentInput {
   assetUrl: string
-  targetIndex: number
+  targetIndex?: number
   payload: ChallengePayload
   encryptedPayload: string
   now: Date
@@ -40,11 +41,21 @@ export function extractEncryptedPayload(body: string): string | null {
 
 export function renderChallengeComment(input: ChallengeCommentInput): string {
   const cooldownText = renderCooldownUntil(input.payload, input.now)
+  const temporalPointer = isTemporalPointerPayload(input.payload)
   const cooldownLines = cooldownText
     ? [
         '',
         '> [!WARNING]',
         `> Next attempt available at ${cooldownText}.`
+      ]
+    : []
+
+  const statusLines = temporalPointer
+    ? renderTemporalPointerStatusLines(input.payload)
+    : renderLegacySlideStatusLines(input)
+  const instructionLines = temporalPointer
+    ? [
+        'Watch the pointer. Record each symbol only when the center lock flashes, then reply with the captured sequence.'
       ]
     : []
 
@@ -55,13 +66,13 @@ export function renderChallengeComment(input: ChallengeCommentInput): string {
     '> [!IMPORTANT]',
     '> This PR is waiting on a quick visual check because it was opened by an outside contributor.',
     '',
-    '| Status | Target | Attempts |',
-    '| --- | ---: | ---: |',
-    `| ⏳ Waiting for answer | **${ordinal(input.targetIndex)} code** | **${attemptsRemaining(input.payload)} left** |`,
+    ...statusLines,
     ...cooldownLines,
     '',
     `![OpenCHA challenge](${input.assetUrl})`,
     '',
+    ...instructionLines,
+    ...(instructionLines.length > 0 ? [''] : []),
     'Reply with:',
     '',
     '```text',
@@ -81,6 +92,25 @@ export function renderChallengeComment(input: ChallengeCommentInput): string {
     '',
     `${SLOT_OPEN}${input.encryptedPayload}${SLOT_CLOSE}`
   ].join('\n')
+}
+
+function renderTemporalPointerStatusLines(payload: ChallengePayload): string[] {
+  return [
+    '| Status | Challenge | Attempts |',
+    '| --- | --- | ---: |',
+    `| ⏳ Waiting for answer | Watch pointer locks | **${attemptsRemaining(payload)} left** |`
+  ]
+}
+
+function renderLegacySlideStatusLines(input: ChallengeCommentInput): string[] {
+  const targetIndex =
+    input.targetIndex ?? ('targetIndex' in input.payload.challengeParams ? input.payload.challengeParams.targetIndex : 1)
+
+  return [
+    '| Status | Target | Attempts |',
+    '| --- | ---: | ---: |',
+    `| ⏳ Waiting for answer | **${ordinal(targetIndex)} code** | **${attemptsRemaining(input.payload)} left** |`
+  ]
 }
 
 export function renderExceededComment(payload: ChallengePayload, encryptedPayload: string): string {
@@ -179,6 +209,14 @@ function renderCooldownUntil(payload: ChallengePayload, now: Date): string | nul
 
 function formatUtcTimestamp(date: Date): string {
   return date.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, ' UTC')
+}
+
+function isTemporalPointerPayload(payload: ChallengePayload): boolean {
+  return (
+    payload.challengeVersion === TEMPORAL_POINTER_CHALLENGE_VERSION &&
+    'kind' in payload.challengeParams &&
+    payload.challengeParams.kind === TEMPORAL_POINTER_KIND
+  )
 }
 
 function sourceLine(article: string, roleParts: readonly string[]): string {

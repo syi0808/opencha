@@ -80,7 +80,7 @@ policy:
 
 ## Challenge Flow
 
-The MVP challenge is a rasterized GIF. It renders ASCII-art symbols around a wheel while a center pointer rotates, briefly locks, and captures one pointed symbol at a time. The PR author watches the lock flashes and replies with the captured symbols in order.
+The MVP challenge is a square rasterized GIF. It renders ASCII-art symbols around a wheel while a center pointer rotates and briefly pauses on captured symbols. The PR author watches the pauses and replies with the captured symbols in order.
 
 No single frame is intended to show the complete answer. Solving requires observing the animation timeline and combining multiple capture events. OpenCHA still bundles Noto Sans Bold, Noto Serif Bold, Anton, and Oswald Bold TTF files for local font rasterization, and the renderer converts glyph outlines into ASCII density cells before drawing the GIF.
 

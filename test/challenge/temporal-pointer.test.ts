@@ -2,7 +2,6 @@ import { verifyAnswer, normalizeAnswer } from '../../src/challenge/answer'
 import { createChallenge } from '../../src/challenge/generate'
 import {
   TEMPORAL_CAPTURE_HOLD_FRAMES,
-  TEMPORAL_NEAR_MISS_HOLD_FRAMES,
   TEMPORAL_RING_SIZE,
   ringContainsAnswerInAnyRotation,
   visibleStringsForTemporalPointerFrame
@@ -42,7 +41,7 @@ describe('temporal pointer challenge', () => {
       codeLength: display.answer.length,
       ringSize: TEMPORAL_RING_SIZE,
       captureCount: display.answer.length,
-      decoyPauseCount: display.answer.length === CODE_LENGTH_MIN ? 1 : 2,
+      decoyPauseCount: 0,
       frameDelayMs: 90,
       charset: CHALLENGE_CHARSET,
       noiseLevel: 'medium'
@@ -85,7 +84,8 @@ describe('temporal pointer challenge', () => {
 
     expect(display.timeline.length).toBeGreaterThan(display.answer.length * TEMPORAL_CAPTURE_HOLD_FRAMES)
     expect(captureFrames).toHaveLength(display.answer.length * TEMPORAL_CAPTURE_HOLD_FRAMES)
-    expect(nearMissFrames).toHaveLength(display.params.decoyPauseCount * TEMPORAL_NEAR_MISS_HOLD_FRAMES)
+    expect(display.params.decoyPauseCount).toBe(0)
+    expect(nearMissFrames).toHaveLength(0)
 
     for (const [frameIndex, cue] of display.timeline.entries()) {
       expect(cue.frameIndex).toBe(frameIndex)

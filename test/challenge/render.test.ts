@@ -13,7 +13,6 @@ import {
   CODE_HOLD_FRAMES,
   FRAME_HEIGHT,
   FRAME_WIDTH,
-  TEMPORAL_POINTER_LOCK_COLOR,
   hasTinyAsciiGlyph,
   renderChallengeFrames
 } from '../../src/challenge/render'
@@ -226,6 +225,7 @@ describe('challenge renderer', () => {
 
     const frames = renderChallengeFrames(challenge)
     expect(frames).toHaveLength(challenge.timeline.length)
+    expect(FRAME_WIDTH).toBe(FRAME_HEIGHT)
 
     for (const frame of frames) {
       expect(frame.width).toBe(FRAME_WIDTH)
@@ -252,7 +252,7 @@ describe('challenge renderer', () => {
     }
   })
 
-  it('draws temporal capture cues without drawing the answer sequence', () => {
+  it('draws temporal pause cues without target highlights or the answer sequence', () => {
     const challenge = createChallenge({ seed: 'temporal-cue-seed', answerSalt: 'salt' }).display
     if (challenge.version !== TEMPORAL_POINTER_CHALLENGE_VERSION) {
       throw new Error('expected temporal pointer display')
@@ -260,12 +260,11 @@ describe('challenge renderer', () => {
 
     const frames = renderChallengeFrames(challenge)
     const captureFrameIndex = challenge.timeline.findIndex((cue) => cue.kind === 'capture')
-    const nearMissFrameIndex = challenge.timeline.findIndex((cue) => cue.kind === 'near-miss')
 
     expect(captureFrameIndex).toBeGreaterThanOrEqual(0)
-    expect(nearMissFrameIndex).toBeGreaterThanOrEqual(0)
-    expect(countColorPixels(frames[captureFrameIndex]!.rgba, TEMPORAL_POINTER_LOCK_COLOR)).toBeGreaterThan(20)
-    expect(countColorPixels(frames[nearMissFrameIndex]!.rgba, TEMPORAL_POINTER_LOCK_COLOR)).toBe(0)
+    expect(challenge.timeline.some((cue) => cue.kind === 'near-miss')).toBe(false)
+    expect(countColorPixels(frames[captureFrameIndex]!.rgba, [170, 64, 54, 255])).toBe(0)
+    expect(countColorPixels(frames[captureFrameIndex]!.rgba, [255, 255, 255, 255])).toBe(0)
 
     for (const cue of challenge.timeline) {
       for (const visible of visibleStringsForTemporalPointerFrame(challenge, cue)) {

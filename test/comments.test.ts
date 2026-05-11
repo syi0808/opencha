@@ -60,8 +60,8 @@ describe('OpenCHA comments', () => {
     })
 
     expect(body).toContain('| Status | Challenge | Attempts |')
-    expect(body).toContain('Watch pointer locks')
-    expect(body).toContain('center lock flashes')
+    expect(body).toContain('Watch arrow pauses')
+    expect(body).toContain('arrow briefly pauses')
     expect(body).toContain('/opencha answer YOUR_CODE')
     expect(body).not.toContain('1st code')
     expect(body).not.toContain('2nd code')
@@ -166,7 +166,7 @@ function sampleTemporalPayload(): ChallengePayload {
       codeLength: 5,
       ringSize: 18,
       captureCount: 5,
-      decoyPauseCount: 1,
+      decoyPauseCount: 0,
       frameDelayMs: 90,
       charset: 'ABCDEFGHJKLMNPQRTUVWXY346789',
       noiseLevel: 'medium'

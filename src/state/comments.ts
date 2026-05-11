@@ -55,7 +55,7 @@ export function renderChallengeComment(input: ChallengeCommentInput): string {
     : renderLegacySlideStatusLines(input)
   const instructionLines = temporalPointer
     ? [
-        'Watch the pointer. Record each symbol only when the center lock flashes, then reply with the captured sequence.'
+        'Watch the pointer. Record each symbol where the arrow briefly pauses, then reply with the captured sequence.'
       ]
     : []
 
@@ -98,7 +98,7 @@ function renderTemporalPointerStatusLines(payload: ChallengePayload): string[] {
   return [
     '| Status | Challenge | Attempts |',
     '| --- | --- | ---: |',
-    `| ⏳ Waiting for answer | Watch pointer locks | **${attemptsRemaining(payload)} left** |`
+    `| ⏳ Waiting for answer | Watch arrow pauses | **${attemptsRemaining(payload)} left** |`
   ]
 }
 

@@ -36,7 +36,7 @@ export function createTemporalPointerDisplay(
     const wheelSymbols = buildLeakFreeWheel(random, answer)
     if (!wheelSymbols) continue
 
-    const decoyPauseCount = answer.length === CODE_LENGTH_MIN ? 1 : 2
+    const decoyPauseCount = 0
     const timeline = buildPointerTimeline({
       seed: options.seed,
       answer,

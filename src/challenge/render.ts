@@ -80,6 +80,11 @@ const TINY_ASCII_FONT: Record<string, readonly string[]> = {
 }
 
 const DUST_SYMBOLS = ['+', '=', '/', '\\', '|', '_'] as const
+const TEMPORAL_SYMBOL_DECOY_STROKES = ['|', '/', '\\', '_', '-', '+', '=', '(', ')', '[', ']'] as const
+export const TEMPORAL_SYMBOL_REAL_STROKE_DROPOUT_RATIO = 0.18
+export const TEMPORAL_SYMBOL_MIN_VISIBLE_RATIO = 0.7
+const TEMPORAL_SYMBOL_MASK_PERIOD = 9
+const TEMPORAL_SYMBOL_MIN_CELLS_FOR_INTERFERENCE = 8
 const TINY_SCALE = 1
 const TINY_GLYPH_WIDTH = 3
 const TINY_GLYPH_HEIGHT = 5
@@ -144,7 +149,7 @@ function renderTemporalPointerFrame(
   const random = new SeededRandom(`${challenge.seed}:temporal-frame:${cue.frameIndex}`)
   prepareCanvas(rgba, random)
 
-  drawTemporalWheel(rgba, challenge, symbolArt)
+  drawTemporalWheel(rgba, challenge, symbolArt, cue.frameIndex)
   drawTemporalPointer(rgba, cue.pointerAngleDegrees)
   drawTemporalHub(rgba)
 
@@ -253,15 +258,173 @@ function wheelSymbolFont(seed: string, symbolIndex: number): AsciiArtFont {
 function drawTemporalWheel(
   rgba: Uint8Array,
   challenge: TemporalPointerDisplayModel,
-  symbolArt: readonly AsciiCodeArt[]
+  symbolArt: readonly AsciiCodeArt[],
+  frameIndex: number
 ): void {
   for (let symbolIndex = 0; symbolIndex < challenge.wheelSymbols.length; symbolIndex++) {
     const art = symbolArt[symbolIndex]
     if (!art) continue
 
     const position = wheelSymbolPosition(symbolIndex, challenge.wheelSymbols.length, art)
-    drawAsciiArtRows(rgba, art, position.x, position.y, TEXT)
+    const frameArt = temporalSymbolArtForFrame(art, challenge, symbolIndex, frameIndex)
+    drawAsciiArtRows(rgba, frameArt, position.x, position.y, TEXT)
   }
+}
+
+interface TemporalArtCell {
+  row: number
+  col: number
+  characterIndex: number
+}
+
+export function temporalSymbolArtForFrame(
+  art: AsciiCodeArt,
+  challenge: TemporalPointerDisplayModel,
+  symbolIndex: number,
+  frameIndex: number
+): AsciiCodeArt {
+  if (art.columns === 0 || art.rowCount === 0) return art
+
+  const rows = art.rows.map((row) => [...row.padEnd(art.columns, ' ')])
+  const characterCells = art.characterCells.map((row) =>
+    Array.from({ length: art.columns }, (_unused, col) => row[col] ?? -1)
+  )
+  const visibleCells = collectTemporalArtCells(rows, characterCells)
+  if (visibleCells.length < TEMPORAL_SYMBOL_MIN_CELLS_FOR_INTERFERENCE) {
+    return {
+      ...art,
+      rows: rows.map((row) => row.join('')),
+      characterCells
+    }
+  }
+
+  const minVisibleCells = Math.ceil(visibleCells.length * TEMPORAL_SYMBOL_MIN_VISIBLE_RATIO)
+  applyTemporalStrokeDropout(rows, visibleCells, challenge.seed, symbolIndex, frameIndex, minVisibleCells)
+  applyTemporalDecoyStrokes(rows, characterCells, visibleCells, challenge.seed, symbolIndex, frameIndex)
+  applyTemporalMovingAsciiMask(rows, minVisibleCells, symbolIndex, frameIndex)
+
+  return {
+    ...art,
+    rows: rows.map((row) => row.join('')),
+    characterCells
+  }
+}
+
+function collectTemporalArtCells(rows: readonly (readonly string[])[], characterCells: readonly (readonly number[])[]): TemporalArtCell[] {
+  const cells: TemporalArtCell[] = []
+
+  for (let row = 0; row < rows.length; row++) {
+    const symbols = rows[row]
+    if (!symbols) continue
+
+    for (let col = 0; col < symbols.length; col++) {
+      const symbol = symbols[col]
+      if (!symbol || symbol === ' ') continue
+      cells.push({
+        row,
+        col,
+        characterIndex: characterCells[row]?.[col] ?? -1
+      })
+    }
+  }
+
+  return cells
+}
+
+function applyTemporalStrokeDropout(
+  rows: string[][],
+  visibleCells: readonly TemporalArtCell[],
+  seed: string,
+  symbolIndex: number,
+  frameIndex: number,
+  minVisibleCells: number
+): void {
+  const maxDropoutCells = Math.floor(visibleCells.length * TEMPORAL_SYMBOL_REAL_STROKE_DROPOUT_RATIO)
+  const dropoutCells = Math.min(maxDropoutCells, Math.max(0, visibleCells.length - minVisibleCells))
+  if (dropoutCells <= 0) return
+
+  const scoredCells = visibleCells
+    .map((cell) => ({
+      cell,
+      score: temporalCellScore(seed, symbolIndex, frameIndex, 'dropout', cell)
+    }))
+    .sort((a, b) => a.score - b.score)
+
+  for (const { cell } of scoredCells.slice(0, dropoutCells)) {
+    rows[cell.row]![cell.col] = ' '
+  }
+}
+
+function applyTemporalDecoyStrokes(
+  rows: string[][],
+  characterCells: number[][],
+  sourceCells: readonly TemporalArtCell[],
+  seed: string,
+  symbolIndex: number,
+  frameIndex: number
+): void {
+  const random = new SeededRandom(`${seed}:temporal-symbol-interference:${symbolIndex}:${frameIndex}:decoys`)
+  const decoyCount = 1 + random.nextInt(2)
+  const offsets = [
+    { row: -1, col: 0 },
+    { row: 1, col: 0 },
+    { row: 0, col: -1 },
+    { row: 0, col: 1 },
+    { row: -1, col: -1 },
+    { row: -1, col: 1 },
+    { row: 1, col: -1 },
+    { row: 1, col: 1 }
+  ] as const
+  let placed = 0
+  const maxAttempts = Math.max(16, sourceCells.length * 3)
+
+  for (let attempt = 0; attempt < maxAttempts && placed < decoyCount; attempt++) {
+    const source = sourceCells[random.nextInt(sourceCells.length)] as TemporalArtCell
+    const offset = offsets[random.nextInt(offsets.length)] as (typeof offsets)[number]
+    const row = source.row + offset.row
+    const col = source.col + offset.col
+    if (row < 0 || row >= rows.length || col < 0 || col >= rows[row]!.length) continue
+    if (rows[row]![col] !== ' ') continue
+
+    rows[row]![col] = TEMPORAL_SYMBOL_DECOY_STROKES[random.nextInt(TEMPORAL_SYMBOL_DECOY_STROKES.length)] as string
+    characterCells[row]![col] = source.characterIndex
+    placed += 1
+  }
+}
+
+function applyTemporalMovingAsciiMask(
+  rows: string[][],
+  minVisibleCells: number,
+  symbolIndex: number,
+  frameIndex: number
+): void {
+  const visibleCells = collectTemporalArtCells(rows, [])
+  const clearBudget = Math.max(0, visibleCells.length - minVisibleCells)
+  if (clearBudget <= 0) return
+
+  const stripePhase = (frameIndex + symbolIndex * 3) % TEMPORAL_SYMBOL_MASK_PERIOD
+  let cleared = 0
+
+  for (const cell of visibleCells) {
+    if (cleared >= clearBudget) break
+    if ((cell.row + cell.col) % TEMPORAL_SYMBOL_MASK_PERIOD !== stripePhase) continue
+
+    rows[cell.row]![cell.col] = ' '
+    cleared += 1
+  }
+}
+
+function temporalCellScore(
+  seed: string,
+  symbolIndex: number,
+  frameIndex: number,
+  phase: string,
+  cell: TemporalArtCell
+): number {
+  const random = new SeededRandom(
+    `${seed}:temporal-symbol-interference:${phase}:${symbolIndex}:${frameIndex}:${cell.row}:${cell.col}`
+  )
+  return random.nextFloat()
 }
 
 function drawTemporalPointer(rgba: Uint8Array, angleDegrees: number): void {

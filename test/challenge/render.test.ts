@@ -13,8 +13,10 @@ import {
   CODE_HOLD_FRAMES,
   FRAME_HEIGHT,
   FRAME_WIDTH,
+  TEMPORAL_SYMBOL_MIN_VISIBLE_RATIO,
   hasTinyAsciiGlyph,
-  renderChallengeFrames
+  renderChallengeFrames,
+  temporalSymbolArtForFrame
 } from '../../src/challenge/render'
 import { visibleStringsForTemporalPointerFrame } from '../../src/challenge/temporal-pointer'
 import {
@@ -224,15 +226,59 @@ describe('challenge renderer', () => {
     }
 
     const frames = renderChallengeFrames(challenge)
+    const repeatedFrames = renderChallengeFrames(challenge)
     expect(frames).toHaveLength(challenge.timeline.length)
+    expect(repeatedFrames).toHaveLength(frames.length)
     expect(FRAME_WIDTH).toBe(FRAME_HEIGHT)
 
-    for (const frame of frames) {
+    for (const [index, frame] of frames.entries()) {
       expect(frame.width).toBe(FRAME_WIDTH)
       expect(frame.height).toBe(FRAME_HEIGHT)
       expect(frame.rgba).toHaveLength(FRAME_WIDTH * FRAME_HEIGHT * 4)
       expect(frame.delayMs).toBe(challenge.params.frameDelayMs)
+
+      if (index === 0 || index === Math.floor(frames.length / 2) || index === frames.length - 1) {
+        expect(frame.rgba).toEqual(repeatedFrames[index]!.rgba)
+      }
     }
+  })
+
+  it('applies deterministic frame-varying ASCII stroke interference to temporal symbols', () => {
+    const challenge = createChallenge({ seed: 'temporal-interference-seed', answerSalt: 'salt' }).display
+    if (challenge.version !== TEMPORAL_POINTER_CHALLENGE_VERSION) {
+      throw new Error('expected temporal pointer display')
+    }
+
+    let varyingSymbols = 0
+    let symbolsWithAddedStrokes = 0
+
+    for (let symbolIndex = 0; symbolIndex < Math.min(6, challenge.wheelSymbols.length); symbolIndex++) {
+      const symbol = challenge.wheelSymbols[symbolIndex] as string
+      const art = renderAsciiCodeArt(symbol, selectAsciiArtFont(challenge.seed, symbolIndex))
+      const first = temporalSymbolArtForFrame(art, challenge, symbolIndex, 3)
+      const repeated = temporalSymbolArtForFrame(art, challenge, symbolIndex, 3)
+      const next = temporalSymbolArtForFrame(art, challenge, symbolIndex, 4)
+      const originalVisibleCells = countAsciiCells(art.rows)
+
+      expect(first.rows).toEqual(repeated.rows)
+      expect(first.characterCells).toEqual(repeated.characterCells)
+      expect(countAsciiCells(first.rows), `visible cells for symbol ${symbolIndex}`).toBeGreaterThanOrEqual(
+        Math.ceil(originalVisibleCells * TEMPORAL_SYMBOL_MIN_VISIBLE_RATIO)
+      )
+
+      if (first.rows.join('\n') !== next.rows.join('\n')) varyingSymbols += 1
+      if (
+        Math.max(
+          countAddedAsciiCells(art.rows, first.rows),
+          countAddedAsciiCells(art.rows, next.rows)
+        ) > 0
+      ) {
+        symbolsWithAddedStrokes += 1
+      }
+    }
+
+    expect(varyingSymbols).toBeGreaterThan(0)
+    expect(symbolsWithAddedStrokes).toBeGreaterThan(0)
   })
 
   it('draws pixels that differ from the background', () => {
@@ -311,6 +357,29 @@ function countColorPixels(rgba: Uint8Array, color: readonly [number, number, num
   for (let i = 0; i < rgba.length; i += 4) {
     if (rgba[i] === color[0] && rgba[i + 1] === color[1] && rgba[i + 2] === color[2] && rgba[i + 3] === color[3]) {
       count += 1
+    }
+  }
+
+  return count
+}
+
+function countAsciiCells(rows: readonly string[]): number {
+  return rows.reduce((count, row) => count + row.replaceAll(' ', '').length, 0)
+}
+
+function countAddedAsciiCells(originalRows: readonly string[], variantRows: readonly string[]): number {
+  const height = Math.max(originalRows.length, variantRows.length)
+  let count = 0
+
+  for (let row = 0; row < height; row++) {
+    const original = originalRows[row] ?? ''
+    const variant = variantRows[row] ?? ''
+    const width = Math.max(original.length, variant.length)
+
+    for (let col = 0; col < width; col++) {
+      if ((original[col] ?? ' ') === ' ' && (variant[col] ?? ' ') !== ' ') {
+        count += 1
+      }
     }
   }
 

@@ -275,7 +275,7 @@ describe('challenge renderer', () => {
     expect(symbolsWithAddedStrokes).toBeGreaterThan(0)
   })
 
-  it('draws temporal wheel symbols with varied colors and an opening start marker', () => {
+  it('draws temporal wheel symbols with varied colors and a shrinking timeline border', () => {
     const challenge = createChallenge({ seed: 'temporal-style-seed', answerSalt: 'salt' }).display
     if (challenge.version !== TEMPORAL_POINTER_CHALLENGE_VERSION) {
       throw new Error('expected temporal pointer display')
@@ -283,8 +283,8 @@ describe('challenge renderer', () => {
 
     const frames = renderChallengeFrames(challenge)
     const firstFrame = frames[0]
-    const laterFrame = frames[10]
-    if (!firstFrame || !laterFrame) throw new Error('expected temporal frames')
+    const finalFrame = frames[frames.length - 1]
+    if (!firstFrame || !finalFrame) throw new Error('expected temporal frames')
 
     const textColorKeys = new Set(ASCII_ART_CHARACTER_COLORS.map(colorKey))
     const seenTextColors = new Set<string>()
@@ -300,9 +300,9 @@ describe('challenge renderer', () => {
         4.5
       )
     }
-    const firstMarkerPixels = countColorPixelsInRect(firstFrame.rgba, [41, 44, 48, 255], 160, 8, 368, 48)
-    const laterMarkerPixels = countColorPixelsInRect(laterFrame.rgba, [41, 44, 48, 255], 160, 8, 368, 48)
-    expect(firstMarkerPixels).toBeGreaterThan(laterMarkerPixels + 60)
+    const firstBorderPixels = countTimelineBorderPixels(firstFrame.rgba, [41, 44, 48, 255])
+    const finalBorderPixels = countTimelineBorderPixels(finalFrame.rgba, [41, 44, 48, 255])
+    expect(firstBorderPixels).toBeGreaterThan(finalBorderPixels + 1200)
   })
 
   it('draws pixels that differ from the background', () => {
@@ -412,6 +412,15 @@ function countColorPixelsInRect(
   }
 
   return count
+}
+
+function countTimelineBorderPixels(rgba: Uint8Array, color: readonly [number, number, number, number]): number {
+  return (
+    countColorPixelsInRect(rgba, color, 8, 8, 520, 14) +
+    countColorPixelsInRect(rgba, color, 514, 8, 520, 520) +
+    countColorPixelsInRect(rgba, color, 8, 514, 520, 520) +
+    countColorPixelsInRect(rgba, color, 8, 8, 14, 520)
+  )
 }
 
 function countAsciiCells(rows: readonly string[]): number {

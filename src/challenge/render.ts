@@ -52,7 +52,9 @@ const WHEEL_SYMBOL_ROTATION_DEGREES = [-7, -5, -3, 0, 3, 5, 7] as const
 const WHEEL_SYMBOL_SCALE_Y = [0.8, 0.84, 0.88] as const
 const POINTER_INSET = 34
 const POINTER_ARROWHEAD_LENGTH = 14
-const TEMPORAL_START_MARKER_FRAMES = 8
+const TEMPORAL_TIMELINE_BORDER_INSET = 10
+const TEMPORAL_TIMELINE_BORDER_THICKNESS = 1
+const TEMPORAL_TIMELINE_FADE_RATIO = 0.45
 
 const TINY_ASCII_FONT: Record<string, readonly string[]> = {
   '!': ['010', '010', '010', '000', '010'],
@@ -165,7 +167,7 @@ function renderTemporalPointerFrame(
   drawTemporalWheel(rgba, challenge, symbolArt, symbolStyles, cue.frameIndex)
   drawTemporalPointer(rgba, cue.pointerAngleDegrees)
   drawTemporalHub(rgba)
-  drawTemporalStartMarker(rgba, cue.frameIndex)
+  drawTemporalTimelineBorder(rgba, cue.frameIndex, challenge.timeline.length)
 
   return {
     width: FRAME_WIDTH,
@@ -526,21 +528,19 @@ function drawTemporalHub(rgba: Uint8Array): void {
   fillCircle(rgba, POINTER_CENTER_X, POINTER_CENTER_Y, 3, MUTED)
 }
 
-function drawTemporalStartMarker(rgba: Uint8Array, frameIndex: number): void {
-  if (frameIndex >= TEMPORAL_START_MARKER_FRAMES) return
+function drawTemporalTimelineBorder(rgba: Uint8Array, frameIndex: number, frameCount: number): void {
+  const left = TEMPORAL_TIMELINE_BORDER_INSET
+  const top = TEMPORAL_TIMELINE_BORDER_INSET
+  const right = FRAME_WIDTH - TEMPORAL_TIMELINE_BORDER_INSET - 1
+  const bottom = FRAME_HEIGHT - TEMPORAL_TIMELINE_BORDER_INSET - 1
+  const perimeter = 2 * ((right - left) + (bottom - top))
+  const fadeFrames = Math.max(1, Math.floor(frameCount * TEMPORAL_TIMELINE_FADE_RATIO))
+  const progress = Math.min(1, frameIndex / fadeFrames)
+  const activeLength = Math.round(perimeter * (1 - progress))
 
-  const progress = frameIndex / Math.max(1, TEMPORAL_START_MARKER_FRAMES - 1)
-  const startAngle = -126 + Math.round(progress * 10)
-  const endAngle = -54 - Math.round(progress * 10)
-  const radius = WHEEL_RADIUS_Y + 38
-
-  for (const offset of [0, 1, 2]) {
-    drawArc(rgba, POINTER_CENTER_X, POINTER_CENTER_Y, radius + offset, startAngle, endAngle, TEXT)
+  for (let offset = 0; offset < TEMPORAL_TIMELINE_BORDER_THICKNESS; offset++) {
+    drawTimelineBorderLength(rgba, left + offset, top + offset, right - offset, bottom - offset, activeLength, TEXT)
   }
-
-  drawLine(rgba, POINTER_CENTER_X - 20, 30, POINTER_CENTER_X + 20, 30, TEXT)
-  drawLine(rgba, POINTER_CENTER_X - 12, 36, POINTER_CENTER_X + 12, 36, MUTED)
-  drawLine(rgba, POINTER_CENTER_X - 5, 42, POINTER_CENTER_X + 5, 42, MUTED)
 }
 
 function wheelSymbolPosition(
@@ -820,28 +820,41 @@ function drawLine(
   }
 }
 
-function drawArc(
+function drawTimelineBorderLength(
   rgba: Uint8Array,
-  centerX: number,
-  centerY: number,
-  radius: number,
-  startAngleDegrees: number,
-  endAngleDegrees: number,
+  left: number,
+  top: number,
+  right: number,
+  bottom: number,
+  length: number,
   color: readonly [number, number, number, number]
 ): void {
-  const steps = Math.max(6, Math.ceil(Math.abs(endAngleDegrees - startAngleDegrees) / 4))
-  let previousX = Math.round(centerX + Math.cos(degreesToRadians(startAngleDegrees)) * radius)
-  let previousY = Math.round(centerY + Math.sin(degreesToRadians(startAngleDegrees)) * radius)
+  let remaining = length
+  remaining = drawTimelineSegment(rgba, left, top, right, top, remaining, color)
+  remaining = drawTimelineSegment(rgba, right, top, right, bottom, remaining, color)
+  remaining = drawTimelineSegment(rgba, right, bottom, left, bottom, remaining, color)
+  drawTimelineSegment(rgba, left, bottom, left, top, remaining, color)
+}
 
-  for (let step = 1; step <= steps; step++) {
-    const progress = step / steps
-    const angle = startAngleDegrees + (endAngleDegrees - startAngleDegrees) * progress
-    const x = Math.round(centerX + Math.cos(degreesToRadians(angle)) * radius)
-    const y = Math.round(centerY + Math.sin(degreesToRadians(angle)) * radius)
-    drawLine(rgba, previousX, previousY, x, y, color)
-    previousX = x
-    previousY = y
-  }
+function drawTimelineSegment(
+  rgba: Uint8Array,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  remaining: number,
+  color: readonly [number, number, number, number]
+): number {
+  if (remaining <= 0) return 0
+
+  const segmentLength = Math.abs(x1 - x0) + Math.abs(y1 - y0)
+  const drawLength = Math.min(remaining, segmentLength)
+  const ratio = segmentLength === 0 ? 0 : drawLength / segmentLength
+  const endX = Math.round(x0 + (x1 - x0) * ratio)
+  const endY = Math.round(y0 + (y1 - y0) * ratio)
+  drawLine(rgba, x0, y0, endX, endY, color)
+
+  return remaining - drawLength
 }
 
 function setPixel(

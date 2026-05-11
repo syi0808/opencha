@@ -13,8 +13,8 @@ import {
 export const TEMPORAL_RING_SIZE = 18
 export const TEMPORAL_CAPTURE_HOLD_FRAMES = 5
 export const TEMPORAL_NEAR_MISS_HOLD_FRAMES = 3
-export const TEMPORAL_TRAVEL_FRAMES_MIN = 7
-export const TEMPORAL_TRAVEL_FRAMES_MAX = 11
+export const TEMPORAL_TRAVEL_FRAMES_MIN = 12
+export const TEMPORAL_TRAVEL_FRAMES_MAX = 16
 export const TEMPORAL_INTRO_FRAMES = 6
 export const TEMPORAL_OUTRO_FRAMES = 6
 export const TEMPORAL_FRAME_DELAY_MS = 90
@@ -252,7 +252,7 @@ function randomTravelFrames(random: SeededRandom): number {
 }
 
 function nextClockwiseAngle(currentAngle: number, targetBaseAngle: number): number {
-  return currentAngle + normalizeDegrees(targetBaseAngle - currentAngle)
+  return currentAngle + 360 + normalizeDegrees(targetBaseAngle - currentAngle)
 }
 
 function normalizeDegrees(value: number): number {

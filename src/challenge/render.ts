@@ -25,8 +25,8 @@ export interface Frame {
   delayMs: number
 }
 
-export const FRAME_WIDTH = 560
-export const FRAME_HEIGHT = 560
+export const FRAME_WIDTH = 528
+export const FRAME_HEIGHT = 528
 export const FRAME_DELAY_MS = 90
 export const CODE_HOLD_FRAMES = 5
 
@@ -38,9 +38,9 @@ const DUST = [211, 205, 196, 255] as const
 
 const POINTER_CENTER_X = Math.round(FRAME_WIDTH / 2)
 const POINTER_CENTER_Y = Math.round(FRAME_HEIGHT / 2)
-const WHEEL_RADIUS_X = 218
-const WHEEL_RADIUS_Y = 218
-const WHEEL_LABEL_FONT_SIZE = 24
+const WHEEL_RADIUS_X = 206
+const WHEEL_RADIUS_Y = 206
+const WHEEL_LABEL_FONT_SIZE = 20
 const WHEEL_LABEL_TRACKING = -2
 const POINTER_INSET = 34
 const POINTER_ARROWHEAD_LENGTH = 14

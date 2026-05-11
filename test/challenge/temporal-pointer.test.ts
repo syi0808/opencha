@@ -4,6 +4,7 @@ import {
   TEMPORAL_CAPTURE_HOLD_FRAMES,
   TEMPORAL_RING_SIZE,
   ringContainsAnswerInAnyRotation,
+  temporalPointerSymbolAngleDegrees,
   visibleStringsForTemporalPointerFrame
 } from '../../src/challenge/temporal-pointer'
 import {
@@ -97,6 +98,7 @@ describe('temporal pointer challenge', () => {
       }
     }
 
+    let previousCaptureAngle = temporalPointerSymbolAngleDegrees(0, display.wheelSymbols.length) + 360
     for (let captureIndex = 0; captureIndex < display.answer.length; captureIndex++) {
       const frames = captureFrames.filter((cue) => cue.captureIndex === captureIndex)
       expect(frames).toHaveLength(TEMPORAL_CAPTURE_HOLD_FRAMES)
@@ -104,6 +106,8 @@ describe('temporal pointer challenge', () => {
       expect(frames.every((cue) => display.wheelSymbols[cue.pointedSymbolIndex] === display.answer[captureIndex])).toBe(
         true
       )
+      expect(frames[0]!.pointerAngleDegrees - previousCaptureAngle).toBeGreaterThanOrEqual(360)
+      previousCaptureAngle = frames[frames.length - 1]!.pointerAngleDegrees
     }
   })
 })

@@ -95,7 +95,7 @@ describe('temporal pointer challenge', () => {
     }
   })
 
-  it('does not duplicate the intro endpoint when the first travel rotation starts', () => {
+  it('moves past the intro endpoint when the first travel rotation starts', () => {
     const challenge = createChallenge({ seed: 'temporal-timeline-seed', answerSalt: 'salt' })
     const display = challenge.display
     if (display.version !== TEMPORAL_POINTER_CHALLENGE_VERSION) {
@@ -108,6 +108,7 @@ describe('temporal pointer challenge', () => {
     expect(introEnd?.kind).toBe('rotation')
     expect(firstTravel?.kind).toBe('rotation')
     expect(firstTravel!.pointerAngleDegrees).toBeGreaterThan(introEnd!.pointerAngleDegrees)
+    expect(firstTravel!.pointedSymbolIndex).not.toBe(introEnd!.pointedSymbolIndex)
   })
 
   it('requires ordered capture events across the frame timeline', () => {

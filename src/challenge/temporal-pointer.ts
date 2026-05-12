@@ -22,6 +22,7 @@ export const TEMPORAL_FRAME_DELAY_MS = 90
 
 const MAX_ANSWER_ATTEMPTS = 64
 const MAX_WHEEL_SHUFFLE_ATTEMPTS = 256
+const CONTINUOUS_ROTATION_START_FRAME = 2
 
 export interface CreateTemporalPointerDisplayOptions {
   seed: string
@@ -232,7 +233,9 @@ function appendRotation(
   symbolCount: number,
   completedCaptures: number
 ): void {
-  const startFrame = shouldSkipDuplicateRotationStart(timeline, startAngle) ? 1 : 0
+  const startFrame = shouldSkipDuplicateRotationStart(timeline, startAngle)
+    ? Math.min(CONTINUOUS_ROTATION_START_FRAME, frameCount - 1)
+    : 0
 
   for (let frame = startFrame; frame < frameCount; frame++) {
     const progress = frameCount <= 1 ? 1 : frame / (frameCount - 1)

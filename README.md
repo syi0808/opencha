@@ -12,6 +12,23 @@ OpenCHA runs as a GitHub Action. When an untrusted outside contributor opens a p
 
 OpenCHA is not an AI detector, a strong anti-bot system, or a replacement for maintainer review.
 
+## How It Looks
+
+A verifying PR starts with a visual challenge. If the author runs out of attempts, OpenCHA moves the PR into a maintainer-needed state.
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>Challenge</strong><br>
+      <img src="docs/challenge.png" alt="OpenCHA challenge comment waiting for an answer" width="100%">
+    </td>
+    <td width="50%" valign="top">
+      <strong>Needs maintainer</strong><br>
+      <img src="docs/denied.png" alt="OpenCHA denied comment asking for maintainer review" width="100%">
+    </td>
+  </tr>
+</table>
+
 ## Installation
 
 Create `.github/workflows/opencha.yml`:

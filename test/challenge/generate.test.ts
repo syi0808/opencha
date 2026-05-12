@@ -53,6 +53,7 @@ describe('createChallenge', () => {
       expect(code).toMatch(allowed)
       expect(code).toMatch(/[A-Z]/)
       expect(code).toMatch(/[a-z]/)
+      expect(code).not.toMatch(/[fthn]/)
     }
   })
 

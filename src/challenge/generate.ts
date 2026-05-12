@@ -11,6 +11,7 @@ import {
   type ChallengeParams,
   type CreateChallengeOptions,
   type GeneratedChallenge,
+  LOWERCASE_CONFUSABLE_CHARS,
   NOISE_LEVEL,
   TARGET_INDEX_MIN
 } from './types'
@@ -93,7 +94,7 @@ function generateCode(random: SeededRandom, length: number): string {
 }
 
 function mixCase(symbol: string, random: SeededRandom): string {
-  if (!isUppercaseAsciiLetter(symbol)) return symbol
+  if (!canUseLowercaseVariant(symbol)) return symbol
   return random.nextInt(2) === 0 ? symbol.toLowerCase() : symbol
 }
 
@@ -108,9 +109,9 @@ function enforceMixedLetterCase(chars: string[], random: SeededRandom): void {
     chars[index] = chars[index]!.toUpperCase()
   }
 
-  if (!chars.some(isLowercaseAsciiLetter)) {
-    const index = (letters.find((letterIndex) => letterIndex !== letters[0]) ?? letters[0]) as number
-    chars[index] = chars[index]!.toLowerCase()
+  if (!chars.some(isReadableLowercaseVariant)) {
+    const index = (letters.find((letterIndex) => canUseLowercaseVariant(chars[letterIndex] as string)) ?? letters[0]) as number
+    chars[index] = randomReadableLowercaseLetter(random)
   }
 }
 
@@ -134,6 +135,16 @@ function randomLetter(random: SeededRandom): string {
   return mixCase(symbol, random)
 }
 
+function randomReadableLowercaseLetter(random: SeededRandom): string {
+  let symbol = CHALLENGE_CHARSET[random.nextInt(CHALLENGE_CHARSET.length)] as string
+
+  while (!canUseLowercaseVariant(symbol)) {
+    symbol = CHALLENGE_CHARSET[random.nextInt(CHALLENGE_CHARSET.length)] as string
+  }
+
+  return symbol.toLowerCase()
+}
+
 function isAsciiLetter(symbol: string): boolean {
   return isUppercaseAsciiLetter(symbol) || isLowercaseAsciiLetter(symbol)
 }
@@ -144,4 +155,12 @@ function isUppercaseAsciiLetter(symbol: string): boolean {
 
 function isLowercaseAsciiLetter(symbol: string): boolean {
   return symbol >= 'a' && symbol <= 'z'
+}
+
+function isReadableLowercaseVariant(symbol: string): boolean {
+  return isLowercaseAsciiLetter(symbol) && canUseLowercaseVariant(symbol.toUpperCase())
+}
+
+function canUseLowercaseVariant(symbol: string): boolean {
+  return isUppercaseAsciiLetter(symbol) && !LOWERCASE_CONFUSABLE_CHARS.includes(symbol)
 }

@@ -12,6 +12,7 @@ export const ANIMATION_FRAMES = 16
 export const TARGET_INDEX_MIN = 2
 export const TARGET_INDEX_MAX = CODE_COUNT_MAX
 export const NOISE_LEVEL = 'medium'
+export const LOWERCASE_CONFUSABLE_CHARS = 'FTHN'
 
 export type LegacySlideChallengeVersion = typeof LEGACY_SLIDE_CHALLENGE_VERSION
 export type TemporalPointerChallengeVersion = typeof TEMPORAL_POINTER_CHALLENGE_VERSION

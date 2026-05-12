@@ -76,6 +76,24 @@ describe('temporal pointer challenge', () => {
     }
   })
 
+  it('keeps visually confusable wheel letters uppercase', () => {
+    for (let index = 0; index < 64; index++) {
+      const challenge = createChallenge({
+        seed: `temporal-readable-case-seed-${index}`,
+        answerSalt: 'salt'
+      })
+      const display = challenge.display
+      if (display.version !== TEMPORAL_POINTER_CHALLENGE_VERSION) {
+        throw new Error('expected temporal pointer display')
+      }
+
+      expect(display.wheelSymbols.join('')).not.toMatch(/[fthn]/)
+      expect(display.answer).not.toMatch(/[fthn]/)
+      expect(display.wheelSymbols.some((symbol) => /^[a-z]$/.test(symbol))).toBe(true)
+      expect(display.wheelSymbols.some((symbol) => /^[A-Z]$/.test(symbol))).toBe(true)
+    }
+  })
+
   it('requires ordered capture events across the frame timeline', () => {
     const challenge = createChallenge({ seed: 'temporal-timeline-seed', answerSalt: 'salt' })
     const display = challenge.display

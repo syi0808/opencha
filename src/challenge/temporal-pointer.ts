@@ -3,6 +3,7 @@ import {
   CHALLENGE_CHARSET,
   CODE_LENGTH_MAX,
   CODE_LENGTH_MIN,
+  LOWERCASE_CONFUSABLE_CHARS,
   NOISE_LEVEL,
   TEMPORAL_POINTER_CHALLENGE_VERSION,
   TEMPORAL_POINTER_KIND,
@@ -166,7 +167,7 @@ function applyWheelCaseToAnswer(
 }
 
 function isCaseVariantSymbol(symbol: string): boolean {
-  return /^[A-Z]$/.test(symbol)
+  return /^[A-Z]$/.test(symbol) && !LOWERCASE_CONFUSABLE_CHARS.includes(symbol)
 }
 
 function buildPointerTimeline(input: {

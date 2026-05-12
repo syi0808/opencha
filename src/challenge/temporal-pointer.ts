@@ -232,7 +232,9 @@ function appendRotation(
   symbolCount: number,
   completedCaptures: number
 ): void {
-  for (let frame = 0; frame < frameCount; frame++) {
+  const startFrame = shouldSkipDuplicateRotationStart(timeline, startAngle) ? 1 : 0
+
+  for (let frame = startFrame; frame < frameCount; frame++) {
     const progress = frameCount <= 1 ? 1 : frame / (frameCount - 1)
     const angle = startAngle + (endAngle - startAngle) * easeInOut(progress)
     timeline.push({
@@ -244,6 +246,11 @@ function appendRotation(
       completedCaptures
     })
   }
+}
+
+function shouldSkipDuplicateRotationStart(timeline: readonly TemporalPointerFrameCue[], startAngle: number): boolean {
+  const previous = timeline[timeline.length - 1]
+  return previous?.kind === 'rotation' && anglesEqual(previous.pointerAngleDegrees, startAngle)
 }
 
 function appendHold(
@@ -300,6 +307,10 @@ function nextClockwiseAngle(currentAngle: number, targetBaseAngle: number): numb
 
 function normalizeDegrees(value: number): number {
   return ((value % 360) + 360) % 360
+}
+
+function anglesEqual(left: number, right: number): boolean {
+  return Math.abs(left - right) < 0.000001
 }
 
 function uniqueSymbols(value: string): string[] {

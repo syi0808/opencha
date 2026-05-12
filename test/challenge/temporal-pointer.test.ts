@@ -2,6 +2,7 @@ import { verifyAnswer, normalizeAnswer } from '../../src/challenge/answer'
 import { createChallenge } from '../../src/challenge/generate'
 import {
   TEMPORAL_CAPTURE_HOLD_FRAMES,
+  TEMPORAL_INTRO_FRAMES,
   TEMPORAL_RING_SIZE,
   ringContainsAnswerInAnyRotation,
   temporalPointerSymbolAngleDegrees,
@@ -92,6 +93,21 @@ describe('temporal pointer challenge', () => {
       expect(display.wheelSymbols.some((symbol) => /^[a-z]$/.test(symbol))).toBe(true)
       expect(display.wheelSymbols.some((symbol) => /^[A-Z]$/.test(symbol))).toBe(true)
     }
+  })
+
+  it('does not duplicate the intro endpoint when the first travel rotation starts', () => {
+    const challenge = createChallenge({ seed: 'temporal-timeline-seed', answerSalt: 'salt' })
+    const display = challenge.display
+    if (display.version !== TEMPORAL_POINTER_CHALLENGE_VERSION) {
+      throw new Error('expected temporal pointer display')
+    }
+
+    const introEnd = display.timeline[TEMPORAL_INTRO_FRAMES - 1]
+    const firstTravel = display.timeline[TEMPORAL_INTRO_FRAMES]
+
+    expect(introEnd?.kind).toBe('rotation')
+    expect(firstTravel?.kind).toBe('rotation')
+    expect(firstTravel!.pointerAngleDegrees).toBeGreaterThan(introEnd!.pointerAngleDegrees)
   })
 
   it('requires ordered capture events across the frame timeline', () => {

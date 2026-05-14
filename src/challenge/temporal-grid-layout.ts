@@ -117,23 +117,23 @@ export function temporalPointerGridReadableCharacterRatio(
       return { x: 0.5, y: verticalDistributed }
     case 'NW':
       return diagonalReadableRatio(characterIndex, characterCount, [
-        { x: 0.6, y: 0.6 },
-        { x: 0.4, y: 0.4 }
+        { x: 0.5, y: 0.88 },
+        { x: 0.88, y: 0.5 }
       ])
     case 'NE':
       return diagonalReadableRatio(characterIndex, characterCount, [
-        { x: 0.4, y: 0.6 },
-        { x: 0.6, y: 0.4 }
+        { x: 0.12, y: 0.5 },
+        { x: 0.5, y: 0.88 }
       ])
     case 'SE':
       return diagonalReadableRatio(characterIndex, characterCount, [
-        { x: 0.4, y: 0.4 },
-        { x: 0.6, y: 0.6 }
+        { x: 0.5, y: 0.12 },
+        { x: 0.12, y: 0.5 }
       ])
     case 'SW':
       return diagonalReadableRatio(characterIndex, characterCount, [
-        { x: 0.6, y: 0.4 },
-        { x: 0.4, y: 0.6 }
+        { x: 0.88, y: 0.5 },
+        { x: 0.5, y: 0.12 }
       ])
   }
 }

@@ -310,13 +310,13 @@ describe('challenge renderer', () => {
     expect(northAnchors[1]!.x).toBeLessThan(northAnchors[2]!.x)
 
     const diagonalDirections = [
-      ['NE', 1, -1],
-      ['SE', 1, 1],
-      ['SW', -1, 1],
-      ['NW', -1, -1]
+      ['NE', 1, 1, -1, 1],
+      ['SE', -1, 1, -1, -1],
+      ['SW', -1, -1, 1, -1],
+      ['NW', 1, -1, 1, 1]
     ] as const
 
-    for (const [slot, xDirection, yDirection] of diagonalDirections) {
+    for (const [slot, xDirection, yDirection, centerSideX, centerSideY] of diagonalDirections) {
       const anchors = [0, 1].map((index) => temporalPointerGridCharacterAnchorRatio(slot, index, 2))
       const readable = [0, 1].map((index) => temporalPointerGridReadableCharacterRatio(slot, index, 2))
       const anchorDeltaX = anchors[1]!.x - anchors[0]!.x
@@ -328,15 +328,21 @@ describe('challenge renderer', () => {
       expect(Math.sign(anchorDeltaY), `${slot} anchor y direction`).toBe(yDirection)
       expect(Math.sign(readableDeltaX), `${slot} readable x direction`).toBe(xDirection)
       expect(Math.sign(readableDeltaY), `${slot} readable y direction`).toBe(yDirection)
-      expect(Math.abs(readableDeltaX), `${slot} readable x separation`).toBeGreaterThan(0.18)
-      expect(Math.abs(readableDeltaX), `${slot} readable x separation`).toBeLessThan(0.28)
-      expect(Math.abs(readableDeltaY), `${slot} readable y separation`).toBeGreaterThan(0.18)
-      expect(Math.abs(readableDeltaY), `${slot} readable y separation`).toBeLessThan(0.28)
+      expect(Math.abs(readableDeltaX), `${slot} readable x separation`).toBeGreaterThan(0.35)
+      expect(Math.abs(readableDeltaX), `${slot} readable x separation`).toBeLessThan(0.41)
+      expect(Math.abs(readableDeltaY), `${slot} readable y separation`).toBeGreaterThan(0.35)
+      expect(Math.abs(readableDeltaY), `${slot} readable y separation`).toBeLessThan(0.41)
       for (const point of readable) {
-        expect(point.x, `${slot} centered x`).toBeGreaterThanOrEqual(0.4)
-        expect(point.x, `${slot} centered x`).toBeLessThanOrEqual(0.6)
-        expect(point.y, `${slot} centered y`).toBeGreaterThanOrEqual(0.4)
-        expect(point.y, `${slot} centered y`).toBeLessThanOrEqual(0.6)
+        if (centerSideX > 0) {
+          expect(point.x, `${slot} x shifted toward table center`).toBeGreaterThanOrEqual(0.5)
+        } else {
+          expect(point.x, `${slot} x shifted toward table center`).toBeLessThanOrEqual(0.5)
+        }
+        if (centerSideY > 0) {
+          expect(point.y, `${slot} y shifted toward table center`).toBeGreaterThanOrEqual(0.5)
+        } else {
+          expect(point.y, `${slot} y shifted toward table center`).toBeLessThanOrEqual(0.5)
+        }
       }
     }
   })

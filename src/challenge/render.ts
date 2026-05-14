@@ -44,8 +44,13 @@ export const FRAME_HEIGHT = 528
 export const FRAME_DELAY_MS = 90
 export const CODE_HOLD_FRAMES = 5
 export const TEMPORAL_DIRECTION_CELL_LOOP_FRAMES = 12
-export const TEMPORAL_SIDE_CELL_FRAME_WIDTH = 380
-export const TEMPORAL_SIDE_CELL_FRAME_HEIGHT = 680
+export const TEMPORAL_GIF_SCALE = 0.8
+export const TEMPORAL_POINTER_FRAME_WIDTH = scaleTemporalDimension(FRAME_WIDTH)
+export const TEMPORAL_POINTER_FRAME_HEIGHT = scaleTemporalDimension(FRAME_HEIGHT)
+const TEMPORAL_SIDE_CELL_SOURCE_FRAME_WIDTH = 380
+const TEMPORAL_SIDE_CELL_SOURCE_FRAME_HEIGHT = 680
+export const TEMPORAL_SIDE_CELL_FRAME_WIDTH = scaleTemporalDimension(TEMPORAL_SIDE_CELL_SOURCE_FRAME_WIDTH)
+export const TEMPORAL_SIDE_CELL_FRAME_HEIGHT = scaleTemporalDimension(TEMPORAL_SIDE_CELL_SOURCE_FRAME_HEIGHT)
 
 const BACKGROUND = [240, 239, 234, 255] as const
 const TEXT = ASCII_ART_CHARACTER_COLORS[0] as RgbaColor
@@ -195,12 +200,12 @@ function renderTemporalPointerFrame(
   drawTemporalHub(rgba)
   drawTemporalTimelineBorder(rgba, cue.frameIndex, challenge.timeline.length)
 
-  return {
+  return scaleFrame({
     width: FRAME_WIDTH,
     height: FRAME_HEIGHT,
     rgba,
     delayMs: challenge.params.frameDelayMs
-  }
+  }, TEMPORAL_POINTER_FRAME_WIDTH, TEMPORAL_POINTER_FRAME_HEIGHT)
 }
 
 function renderTemporalDirectionCellFrames(
@@ -278,20 +283,30 @@ function renderTemporalDirectionCellFrame(
 
   drawObstruction(rgba, random, frameSize.width, frameSize.height)
 
-  return {
+  return scaleFrame({
     width: frameSize.width,
     height: frameSize.height,
     rgba,
     delayMs: challenge.params.frameDelayMs
-  }
+  }, temporalDirectionCellOutputFrameWidth(symbolIndex), temporalDirectionCellOutputFrameHeight(symbolIndex))
 }
 
 function temporalDirectionCellFrameSize(symbolIndex: number): { width: number; height: number } {
   const slot = TEMPORAL_POINTER_GRID_SLOTS[symbolIndex]
 
   return slot === 'W' || slot === 'E'
-    ? { width: TEMPORAL_SIDE_CELL_FRAME_WIDTH, height: TEMPORAL_SIDE_CELL_FRAME_HEIGHT }
+    ? { width: TEMPORAL_SIDE_CELL_SOURCE_FRAME_WIDTH, height: TEMPORAL_SIDE_CELL_SOURCE_FRAME_HEIGHT }
     : { width: FRAME_WIDTH, height: FRAME_HEIGHT }
+}
+
+function temporalDirectionCellOutputFrameWidth(symbolIndex: number): number {
+  const slot = TEMPORAL_POINTER_GRID_SLOTS[symbolIndex]
+  return slot === 'W' || slot === 'E' ? TEMPORAL_SIDE_CELL_FRAME_WIDTH : TEMPORAL_POINTER_FRAME_WIDTH
+}
+
+function temporalDirectionCellOutputFrameHeight(symbolIndex: number): number {
+  const slot = TEMPORAL_POINTER_GRID_SLOTS[symbolIndex]
+  return slot === 'W' || slot === 'E' ? TEMPORAL_SIDE_CELL_FRAME_HEIGHT : TEMPORAL_POINTER_FRAME_HEIGHT
 }
 
 export function hasTinyAsciiGlyph(symbol: string): boolean {
@@ -983,6 +998,38 @@ function clamp(value: number, min: number, max: number): number {
 
 function pointDistance(left: { x: number; y: number }, right: { x: number; y: number }): number {
   return Math.hypot(left.x - right.x, left.y - right.y)
+}
+
+function scaleTemporalDimension(value: number): number {
+  return Math.max(1, Math.round(value * TEMPORAL_GIF_SCALE))
+}
+
+function scaleFrame(frame: Frame, width: number, height: number): Frame {
+  if (frame.width === width && frame.height === height) return frame
+
+  const rgba = new Uint8Array(width * height * 4)
+
+  for (let y = 0; y < height; y++) {
+    const sourceY = Math.min(frame.height - 1, Math.floor((y * frame.height) / height))
+
+    for (let x = 0; x < width; x++) {
+      const sourceX = Math.min(frame.width - 1, Math.floor((x * frame.width) / width))
+      const sourceOffset = (sourceY * frame.width + sourceX) * 4
+      const targetOffset = (y * width + x) * 4
+
+      rgba[targetOffset] = frame.rgba[sourceOffset] ?? 0
+      rgba[targetOffset + 1] = frame.rgba[sourceOffset + 1] ?? 0
+      rgba[targetOffset + 2] = frame.rgba[sourceOffset + 2] ?? 0
+      rgba[targetOffset + 3] = frame.rgba[sourceOffset + 3] ?? 255
+    }
+  }
+
+  return {
+    width,
+    height,
+    rgba,
+    delayMs: frame.delayMs
+  }
 }
 
 function fillCircle(

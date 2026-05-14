@@ -27,14 +27,14 @@ export const TEMPORAL_POINTER_GRID_CELL_DISPLAY_SIZES: Record<
   TemporalPointerGridSlot,
   TemporalPointerGridDisplaySize
 > = {
-  N: { width: 270, height: 190 },
-  NE: { width: 230, height: 230 },
-  E: { width: 190, height: 340 },
-  SE: { width: 230, height: 230 },
-  S: { width: 270, height: 190 },
-  SW: { width: 230, height: 230 },
-  W: { width: 190, height: 340 },
-  NW: { width: 230, height: 230 }
+  N: { width: 216, height: 152 },
+  NE: { width: 184, height: 184 },
+  E: { width: 152, height: 272 },
+  SE: { width: 184, height: 184 },
+  S: { width: 216, height: 152 },
+  SW: { width: 184, height: 184 },
+  W: { width: 152, height: 272 },
+  NW: { width: 184, height: 184 }
 }
 
 export const TEMPORAL_POINTER_GRID_CENTER_DISPLAY_SIZE: TemporalPointerGridDisplaySize = {

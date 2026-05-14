@@ -22,6 +22,8 @@ import {
   FRAME_HEIGHT,
   FRAME_WIDTH,
   TEMPORAL_DIRECTION_CELL_LOOP_FRAMES,
+  TEMPORAL_POINTER_FRAME_HEIGHT,
+  TEMPORAL_POINTER_FRAME_WIDTH,
   TEMPORAL_SIDE_CELL_FRAME_HEIGHT,
   TEMPORAL_SIDE_CELL_FRAME_WIDTH,
   TEMPORAL_SYMBOL_MIN_VISIBLE_RATIO,
@@ -251,7 +253,7 @@ describe('challenge renderer', () => {
       for (const frame of asset.frames) {
         const expectedSize = asset.slot === 'W' || asset.slot === 'E'
           ? { width: TEMPORAL_SIDE_CELL_FRAME_WIDTH, height: TEMPORAL_SIDE_CELL_FRAME_HEIGHT }
-          : { width: FRAME_WIDTH, height: FRAME_HEIGHT }
+          : { width: TEMPORAL_POINTER_FRAME_WIDTH, height: TEMPORAL_POINTER_FRAME_HEIGHT }
 
         expect(frame.width, `${asset.slot} width`).toBe(expectedSize.width)
         expect(frame.height, `${asset.slot} height`).toBe(expectedSize.height)
@@ -262,11 +264,11 @@ describe('challenge renderer', () => {
   }, 10000)
 
   it('places temporal grid GIFs with non-uniform sizes and character-centered pointer targets', () => {
-    expect(temporalPointerGridDisplaySize('center')).toEqual({ width: 230, height: 230 })
-    expect(temporalPointerGridDisplaySize('W')).toEqual({ width: 190, height: 340 })
-    expect(temporalPointerGridDisplaySize('E')).toEqual({ width: 190, height: 340 })
-    expect(temporalPointerGridDisplaySize('N')).toEqual({ width: 270, height: 190 })
-    expect(temporalPointerGridDisplaySize('NE')).toEqual({ width: 230, height: 230 })
+    expect(temporalPointerGridDisplaySize('center')).toEqual({ width: 184, height: 184 })
+    expect(temporalPointerGridDisplaySize('W')).toEqual({ width: 152, height: 272 })
+    expect(temporalPointerGridDisplaySize('E')).toEqual({ width: 152, height: 272 })
+    expect(temporalPointerGridDisplaySize('N')).toEqual({ width: 216, height: 152 })
+    expect(temporalPointerGridDisplaySize('NE')).toEqual({ width: 184, height: 184 })
 
     const renderedSlots = TEMPORAL_POINTER_GRID_TABLE_ROWS.flat()
     const sizeKeys = new Set(renderedSlots.map((slot) => {

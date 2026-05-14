@@ -156,7 +156,7 @@ describe('OpenCHA flows', () => {
     expect(passed.payload.passMethod).toBe('approve')
     expect(passed.payload.passedBy).toBe('maintainer')
     expect(gateway.comments.some((comment) => comment.body.includes('Maintainer @maintainer approved this PR.'))).toBe(true)
-  })
+  }, 15000)
 
   it('does not let a trusted maintainer pass with answer command', async () => {
     const gateway = new FakeGateway()

@@ -44,6 +44,8 @@ export const FRAME_HEIGHT = 528
 export const FRAME_DELAY_MS = 90
 export const CODE_HOLD_FRAMES = 5
 export const TEMPORAL_DIRECTION_CELL_LOOP_FRAMES = 12
+export const TEMPORAL_SIDE_CELL_FRAME_WIDTH = 380
+export const TEMPORAL_SIDE_CELL_FRAME_HEIGHT = 680
 
 const BACKGROUND = [240, 239, 234, 255] as const
 const TEXT = ASCII_ART_CHARACTER_COLORS[0] as RgbaColor
@@ -239,9 +241,10 @@ function renderTemporalDirectionCellFrame(
   symbolIndex: number,
   frameIndex: number
 ): Frame {
-  const rgba = new Uint8Array(FRAME_WIDTH * FRAME_HEIGHT * 4)
+  const frameSize = temporalDirectionCellFrameSize(symbolIndex)
+  const rgba = new Uint8Array(frameSize.width * frameSize.height * 4)
   const random = new SeededRandom(`${challenge.seed}:temporal-cell:${symbolIndex}:${frameIndex}`)
-  prepareCanvas(rgba, random)
+  prepareCanvas(rgba, random, frameSize.width, frameSize.height)
 
   for (const character of characters) {
     const interferenceIndex = symbolIndex * 8 + character.characterIndex
@@ -249,13 +252,17 @@ function renderTemporalDirectionCellFrame(
     const target = temporalGridCharacterTargetPoint(
       symbolIndex,
       character.characterIndex,
-      character.characterCount
+      character.characterCount,
+      frameSize.width,
+      frameSize.height
     )
     const base = temporalGridReadableCharacterPosition(
       frameArt,
       symbolIndex,
       character.characterIndex,
-      character.characterCount
+      character.characterCount,
+      frameSize.width,
+      frameSize.height
     )
     const readableCenter = {
       x: Math.round(base.x + character.style.offsetX + frameArt.widthPx / 2),
@@ -263,20 +270,28 @@ function renderTemporalDirectionCellFrame(
     }
 
     if (pointDistance(target, readableCenter) > 8) {
-      drawLine(rgba, target.x, target.y, readableCenter.x, readableCenter.y, DUST)
-      drawTemporalTargetAnchor(rgba, target.x, target.y)
+      drawLine(rgba, target.x, target.y, readableCenter.x, readableCenter.y, DUST, frameSize.width, frameSize.height)
+      drawTemporalTargetAnchor(rgba, target.x, target.y, frameSize.width, frameSize.height)
     }
-    drawAsciiArtRowsTransformed(rgba, frameArt, base.x, base.y, TEXT, character.style)
+    drawAsciiArtRowsTransformed(rgba, frameArt, base.x, base.y, TEXT, character.style, frameSize.width, frameSize.height)
   }
 
-  drawObstruction(rgba, random)
+  drawObstruction(rgba, random, frameSize.width, frameSize.height)
 
   return {
-    width: FRAME_WIDTH,
-    height: FRAME_HEIGHT,
+    width: frameSize.width,
+    height: frameSize.height,
     rgba,
     delayMs: challenge.params.frameDelayMs
   }
+}
+
+function temporalDirectionCellFrameSize(symbolIndex: number): { width: number; height: number } {
+  const slot = TEMPORAL_POINTER_GRID_SLOTS[symbolIndex]
+
+  return slot === 'W' || slot === 'E'
+    ? { width: TEMPORAL_SIDE_CELL_FRAME_WIDTH, height: TEMPORAL_SIDE_CELL_FRAME_HEIGHT }
+    : { width: FRAME_WIDTH, height: FRAME_HEIGHT }
 }
 
 export function hasTinyAsciiGlyph(symbol: string): boolean {
@@ -665,12 +680,18 @@ function drawTemporalTimelineBorder(rgba: Uint8Array, frameIndex: number, frameC
   }
 }
 
-function drawTemporalTargetAnchor(rgba: Uint8Array, centerX: number, centerY: number): void {
-  fillCircle(rgba, centerX, centerY, TEMPORAL_GRID_ANCHOR_RADIUS, DUST)
-  drawLine(rgba, centerX - 5, centerY, centerX - 2, centerY, MUTED)
-  drawLine(rgba, centerX + 2, centerY, centerX + 5, centerY, MUTED)
-  drawLine(rgba, centerX, centerY - 5, centerX, centerY - 2, MUTED)
-  drawLine(rgba, centerX, centerY + 2, centerX, centerY + 5, MUTED)
+function drawTemporalTargetAnchor(
+  rgba: Uint8Array,
+  centerX: number,
+  centerY: number,
+  frameWidth = FRAME_WIDTH,
+  frameHeight = FRAME_HEIGHT
+): void {
+  fillCircle(rgba, centerX, centerY, TEMPORAL_GRID_ANCHOR_RADIUS, DUST, frameWidth, frameHeight)
+  drawLine(rgba, centerX - 5, centerY, centerX - 2, centerY, MUTED, frameWidth, frameHeight)
+  drawLine(rgba, centerX + 2, centerY, centerX + 5, centerY, MUTED, frameWidth, frameHeight)
+  drawLine(rgba, centerX, centerY - 5, centerX, centerY - 2, MUTED, frameWidth, frameHeight)
+  drawLine(rgba, centerX, centerY + 2, centerX, centerY + 5, MUTED, frameWidth, frameHeight)
 }
 
 function wheelSymbolPosition(
@@ -696,10 +717,15 @@ function ellipseRadiusAtAngle(radians: number): number {
   return 1 / Math.sqrt((cos * cos) / (WHEEL_RADIUS_X * WHEEL_RADIUS_X) + (sin * sin) / (WHEEL_RADIUS_Y * WHEEL_RADIUS_Y))
 }
 
-function prepareCanvas(rgba: Uint8Array, random: SeededRandom): void {
+function prepareCanvas(
+  rgba: Uint8Array,
+  random: SeededRandom,
+  frameWidth = FRAME_WIDTH,
+  frameHeight = FRAME_HEIGHT
+): void {
   fill(rgba, BACKGROUND)
-  drawDustField(rgba, random)
-  drawLines(rgba, random)
+  drawDustField(rgba, random, frameWidth, frameHeight)
+  drawLines(rgba, random, frameWidth, frameHeight)
 }
 
 function fill(rgba: Uint8Array, color: readonly [number, number, number, number]): void {
@@ -711,13 +737,20 @@ function fill(rgba: Uint8Array, color: readonly [number, number, number, number]
   }
 }
 
-function drawDustField(rgba: Uint8Array, random: SeededRandom): void {
+function drawDustField(
+  rgba: Uint8Array,
+  random: SeededRandom,
+  frameWidth = FRAME_WIDTH,
+  frameHeight = FRAME_HEIGHT
+): void {
   for (let i = 0; i < 120; i++) {
     setPixel(
       rgba,
-      random.nextInt(FRAME_WIDTH),
-      random.nextInt(FRAME_HEIGHT),
-      random.nextInt(5) === 0 ? MUTED : NOISE
+      random.nextInt(frameWidth),
+      random.nextInt(frameHeight),
+      random.nextInt(5) === 0 ? MUTED : NOISE,
+      frameWidth,
+      frameHeight
     )
   }
 
@@ -726,44 +759,60 @@ function drawDustField(rgba: Uint8Array, random: SeededRandom): void {
     drawTinySymbol(
       rgba,
       symbol,
-      random.nextInt(FRAME_WIDTH),
-      random.nextInt(FRAME_HEIGHT),
-      random.nextInt(4) === 0 ? MUTED : DUST
+      random.nextInt(frameWidth),
+      random.nextInt(frameHeight),
+      random.nextInt(4) === 0 ? MUTED : DUST,
+      frameWidth,
+      frameHeight
     )
   }
 }
 
-function drawLines(rgba: Uint8Array, random: SeededRandom): void {
+function drawLines(
+  rgba: Uint8Array,
+  random: SeededRandom,
+  frameWidth = FRAME_WIDTH,
+  frameHeight = FRAME_HEIGHT
+): void {
   for (let i = 0; i < 5; i++) {
     drawLine(
       rgba,
-      random.nextInt(FRAME_WIDTH),
-      random.nextInt(FRAME_HEIGHT),
-      random.nextInt(FRAME_WIDTH),
-      random.nextInt(FRAME_HEIGHT),
-      NOISE
+      random.nextInt(frameWidth),
+      random.nextInt(frameHeight),
+      random.nextInt(frameWidth),
+      random.nextInt(frameHeight),
+      NOISE,
+      frameWidth,
+      frameHeight
     )
   }
 }
 
-function drawObstruction(rgba: Uint8Array, random: SeededRandom): void {
+function drawObstruction(
+  rgba: Uint8Array,
+  random: SeededRandom,
+  frameWidth = FRAME_WIDTH,
+  frameHeight = FRAME_HEIGHT
+): void {
   for (let i = 0; i < 3; i++) {
-    const y = 16 + random.nextInt(FRAME_HEIGHT - 32)
+    const y = 16 + random.nextInt(frameHeight - 32)
     const color = random.nextInt(3) === 0 ? MUTED : NOISE
     drawLine(
       rgba,
       12 + random.nextInt(36),
       y,
-      FRAME_WIDTH - 12 - random.nextInt(36),
+      frameWidth - 12 - random.nextInt(36),
       y + random.nextInt(9) - 4,
-      color
+      color,
+      frameWidth,
+      frameHeight
     )
   }
 
   for (let i = 0; i < 14; i++) {
-    const x = random.nextInt(FRAME_WIDTH)
-    const y = random.nextInt(FRAME_HEIGHT)
-    fillRect(rgba, x, y, 1 + random.nextInt(2), 8 + random.nextInt(16), DUST)
+    const x = random.nextInt(frameWidth)
+    const y = random.nextInt(frameHeight)
+    fillRect(rgba, x, y, 1 + random.nextInt(2), 8 + random.nextInt(16), DUST, frameWidth, frameHeight)
   }
 }
 
@@ -801,7 +850,9 @@ function drawAsciiArtRowsTransformed(
   x: number,
   y: number,
   fallbackColor: RgbaColor,
-  style: TemporalWheelSymbolStyle
+  style: TemporalWheelSymbolStyle,
+  frameWidth = FRAME_WIDTH,
+  frameHeight = FRAME_HEIGHT
 ): void {
   const radians = degreesToRadians(style.rotationDegrees)
   const sin = Math.sin(radians)
@@ -825,7 +876,7 @@ function drawAsciiArtRowsTransformed(
       const rotatedX = centerX + dx * cos - dy * sin - TINY_GLYPH_WIDTH / 2
       const rotatedY = centerY + dx * sin + dy * cos - TINY_GLYPH_HEIGHT / 2
 
-      drawTinySymbol(rgba, symbol, Math.round(rotatedX), Math.round(rotatedY), color)
+      drawTinySymbol(rgba, symbol, Math.round(rotatedX), Math.round(rotatedY), color, frameWidth, frameHeight)
     }
   }
 }
@@ -835,7 +886,9 @@ function drawTinySymbol(
   symbol: string,
   x: number,
   y: number,
-  color: readonly [number, number, number, number]
+  color: readonly [number, number, number, number],
+  frameWidth = FRAME_WIDTH,
+  frameHeight = FRAME_HEIGHT
 ): void {
   const glyph = TINY_ASCII_FONT[symbol]
   if (!glyph) return
@@ -845,7 +898,16 @@ function drawTinySymbol(
 
     for (let col = 0; col < TINY_GLYPH_WIDTH; col++) {
       if (bits[col] === '1') {
-        fillRect(rgba, x + col * TINY_SCALE, y + row * TINY_SCALE, TINY_SCALE, TINY_SCALE, color)
+        fillRect(
+          rgba,
+          x + col * TINY_SCALE,
+          y + row * TINY_SCALE,
+          TINY_SCALE,
+          TINY_SCALE,
+          color,
+          frameWidth,
+          frameHeight
+        )
       }
     }
   }
@@ -861,15 +923,17 @@ function centerPosition(art: AsciiCodeArt): { x: number; y: number } {
 function temporalGridCharacterTargetPoint(
   symbolIndex: number,
   characterIndex: number,
-  characterCount: number
+  characterCount: number,
+  frameWidth = FRAME_WIDTH,
+  frameHeight = FRAME_HEIGHT
 ): { x: number; y: number } {
   const slot = TEMPORAL_POINTER_GRID_SLOTS[symbolIndex]
   if (!slot) return { x: POINTER_CENTER_X, y: POINTER_CENTER_Y }
 
   const anchor = temporalPointerGridCharacterAnchorRatio(slot, characterIndex, characterCount)
   return {
-    x: Math.round(anchor.x * FRAME_WIDTH),
-    y: Math.round(anchor.y * FRAME_HEIGHT)
+    x: Math.round(anchor.x * frameWidth),
+    y: Math.round(anchor.y * frameHeight)
   }
 }
 
@@ -877,18 +941,20 @@ function temporalGridReadableCharacterPosition(
   art: AsciiCodeArt,
   symbolIndex: number,
   characterIndex: number,
-  characterCount: number
+  characterCount: number,
+  frameWidth = FRAME_WIDTH,
+  frameHeight = FRAME_HEIGHT
 ): { x: number; y: number } {
   const slot = TEMPORAL_POINTER_GRID_SLOTS[symbolIndex]
   if (!slot) return centerPosition(art)
 
   const anchor = temporalPointerGridReadableCharacterRatio(slot, characterIndex, characterCount)
-  const x = Math.round(anchor.x * FRAME_WIDTH - art.widthPx / 2)
-  const y = Math.round(anchor.y * FRAME_HEIGHT - art.heightPx / 2)
+  const x = Math.round(anchor.x * frameWidth - art.widthPx / 2)
+  const y = Math.round(anchor.y * frameHeight - art.heightPx / 2)
 
   return {
-    x: clamp(x, TEMPORAL_GRID_READABLE_MARGIN, FRAME_WIDTH - art.widthPx - TEMPORAL_GRID_READABLE_MARGIN),
-    y: clamp(y, TEMPORAL_GRID_READABLE_MARGIN, FRAME_HEIGHT - art.heightPx - TEMPORAL_GRID_READABLE_MARGIN)
+    x: clamp(x, TEMPORAL_GRID_READABLE_MARGIN, frameWidth - art.widthPx - TEMPORAL_GRID_READABLE_MARGIN),
+    y: clamp(y, TEMPORAL_GRID_READABLE_MARGIN, frameHeight - art.heightPx - TEMPORAL_GRID_READABLE_MARGIN)
   }
 }
 
@@ -924,7 +990,9 @@ function fillCircle(
   centerX: number,
   centerY: number,
   radius: number,
-  color: readonly [number, number, number, number]
+  color: readonly [number, number, number, number],
+  frameWidth = FRAME_WIDTH,
+  frameHeight = FRAME_HEIGHT
 ): void {
   const radiusSquared = radius * radius
 
@@ -933,7 +1001,7 @@ function fillCircle(
       const dx = x - centerX
       const dy = y - centerY
       if (dx * dx + dy * dy <= radiusSquared) {
-        setPixel(rgba, x, y, color)
+        setPixel(rgba, x, y, color, frameWidth, frameHeight)
       }
     }
   }
@@ -945,11 +1013,13 @@ function fillRect(
   y: number,
   width: number,
   height: number,
-  color: readonly [number, number, number, number]
+  color: readonly [number, number, number, number],
+  frameWidth = FRAME_WIDTH,
+  frameHeight = FRAME_HEIGHT
 ): void {
   for (let yy = y; yy < y + height; yy++) {
     for (let xx = x; xx < x + width; xx++) {
-      setPixel(rgba, xx, yy, color)
+      setPixel(rgba, xx, yy, color, frameWidth, frameHeight)
     }
   }
 }
@@ -960,7 +1030,9 @@ function drawLine(
   y0: number,
   x1: number,
   y1: number,
-  color: readonly [number, number, number, number]
+  color: readonly [number, number, number, number],
+  frameWidth = FRAME_WIDTH,
+  frameHeight = FRAME_HEIGHT
 ): void {
   let dx = Math.abs(x1 - x0)
   let dy = -Math.abs(y1 - y0)
@@ -971,7 +1043,7 @@ function drawLine(
   let y = y0
 
   while (true) {
-    setPixel(rgba, x, y, color)
+    setPixel(rgba, x, y, color, frameWidth, frameHeight)
     if (x === x1 && y === y1) {
       break
     }
@@ -1033,13 +1105,15 @@ function setPixel(
   rgba: Uint8Array,
   x: number,
   y: number,
-  color: readonly [number, number, number, number]
+  color: readonly [number, number, number, number],
+  frameWidth = FRAME_WIDTH,
+  frameHeight = FRAME_HEIGHT
 ): void {
-  if (x < 0 || x >= FRAME_WIDTH || y < 0 || y >= FRAME_HEIGHT) {
+  if (x < 0 || x >= frameWidth || y < 0 || y >= frameHeight) {
     return
   }
 
-  const offset = (y * FRAME_WIDTH + x) * 4
+  const offset = (y * frameWidth + x) * 4
   rgba[offset] = color[0]
   rgba[offset + 1] = color[1]
   rgba[offset + 2] = color[2]

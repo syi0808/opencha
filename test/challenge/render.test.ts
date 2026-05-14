@@ -22,10 +22,13 @@ import {
   FRAME_HEIGHT,
   FRAME_WIDTH,
   TEMPORAL_DIRECTION_CELL_LOOP_FRAMES,
+  TEMPORAL_SIDE_CELL_FRAME_HEIGHT,
+  TEMPORAL_SIDE_CELL_FRAME_WIDTH,
   TEMPORAL_SYMBOL_MIN_VISIBLE_RATIO,
   hasTinyAsciiGlyph,
   renderChallengeAssets,
   renderChallengeFrames,
+  type Frame,
   temporalSymbolArtForFrame
 } from '../../src/challenge/render'
 import { visibleStringsForTemporalPointerFrame } from '../../src/challenge/temporal-pointer'
@@ -246,9 +249,13 @@ describe('challenge renderer', () => {
         asset.slot === 'center' ? challenge.timeline.length : TEMPORAL_DIRECTION_CELL_LOOP_FRAMES
       )
       for (const frame of asset.frames) {
-        expect(frame.width).toBe(FRAME_WIDTH)
-        expect(frame.height).toBe(FRAME_HEIGHT)
-        expect(frame.rgba).toHaveLength(FRAME_WIDTH * FRAME_HEIGHT * 4)
+        const expectedSize = asset.slot === 'W' || asset.slot === 'E'
+          ? { width: TEMPORAL_SIDE_CELL_FRAME_WIDTH, height: TEMPORAL_SIDE_CELL_FRAME_HEIGHT }
+          : { width: FRAME_WIDTH, height: FRAME_HEIGHT }
+
+        expect(frame.width, `${asset.slot} width`).toBe(expectedSize.width)
+        expect(frame.height, `${asset.slot} height`).toBe(expectedSize.height)
+        expect(frame.rgba).toHaveLength(expectedSize.width * expectedSize.height * 4)
         expect(frame.delayMs).toBe(challenge.params.frameDelayMs)
       }
     }
@@ -303,10 +310,10 @@ describe('challenge renderer', () => {
     expect(northAnchors[1]!.x).toBeLessThan(northAnchors[2]!.x)
 
     const diagonalDirections = [
-      ['NE', 1, 1],
-      ['SE', -1, 1],
-      ['SW', -1, -1],
-      ['NW', 1, -1]
+      ['NE', 1, -1],
+      ['SE', 1, 1],
+      ['SW', -1, 1],
+      ['NW', -1, -1]
     ] as const
 
     for (const [slot, xDirection, yDirection] of diagonalDirections) {
@@ -321,15 +328,15 @@ describe('challenge renderer', () => {
       expect(Math.sign(anchorDeltaY), `${slot} anchor y direction`).toBe(yDirection)
       expect(Math.sign(readableDeltaX), `${slot} readable x direction`).toBe(xDirection)
       expect(Math.sign(readableDeltaY), `${slot} readable y direction`).toBe(yDirection)
-      expect(Math.abs(readableDeltaX), `${slot} readable x separation`).toBeGreaterThan(0.28)
-      expect(Math.abs(readableDeltaX), `${slot} readable x separation`).toBeLessThan(0.4)
-      expect(Math.abs(readableDeltaY), `${slot} readable y separation`).toBeGreaterThan(0.28)
-      expect(Math.abs(readableDeltaY), `${slot} readable y separation`).toBeLessThan(0.4)
+      expect(Math.abs(readableDeltaX), `${slot} readable x separation`).toBeGreaterThan(0.18)
+      expect(Math.abs(readableDeltaX), `${slot} readable x separation`).toBeLessThan(0.28)
+      expect(Math.abs(readableDeltaY), `${slot} readable y separation`).toBeGreaterThan(0.18)
+      expect(Math.abs(readableDeltaY), `${slot} readable y separation`).toBeLessThan(0.28)
       for (const point of readable) {
-        expect(point.x, `${slot} centered x`).toBeGreaterThan(0.3)
-        expect(point.x, `${slot} centered x`).toBeLessThan(0.7)
-        expect(point.y, `${slot} centered y`).toBeGreaterThan(0.3)
-        expect(point.y, `${slot} centered y`).toBeLessThan(0.7)
+        expect(point.x, `${slot} centered x`).toBeGreaterThanOrEqual(0.4)
+        expect(point.x, `${slot} centered x`).toBeLessThanOrEqual(0.6)
+        expect(point.y, `${slot} centered y`).toBeGreaterThanOrEqual(0.4)
+        expect(point.y, `${slot} centered y`).toBeLessThanOrEqual(0.6)
       }
     }
   })
@@ -347,9 +354,9 @@ describe('challenge renderer', () => {
     const readableAnchors = [0, 1, 2].map((index) => temporalPointerGridReadableCharacterRatio('W', index, 3))
 
     for (const [index, anchor] of readableAnchors.entries()) {
-      const centerX = Math.round(anchor.x * FRAME_WIDTH)
-      const centerY = Math.round(anchor.y * FRAME_HEIGHT)
-      const visiblePixels = countPalettePixelsInRect(frame.rgba, textColorKeys, centerX - 70, centerY - 78, centerX + 70, centerY + 78)
+      const centerX = Math.round(anchor.x * frame.width)
+      const centerY = Math.round(anchor.y * frame.height)
+      const visiblePixels = countPalettePixelsInRect(frame, textColorKeys, centerX - 70, centerY - 90, centerX + 70, centerY + 90)
 
       expect(visiblePixels, `visible readable character ${index}`).toBeGreaterThan(40)
     }
@@ -429,10 +436,10 @@ describe('challenge renderer', () => {
 
     const firstCellFrame = assets.find((asset) => asset.slot === 'W')?.frames[0]
     if (!firstCellFrame) throw new Error('expected temporal cell frame')
-    expect(countTimelineBorderPixels(firstCellFrame.rgba, [41, 44, 48, 255])).toBeLessThan(120)
+    expect(countTimelineBorderPixels(firstCellFrame, [41, 44, 48, 255])).toBeLessThan(120)
 
-    const firstBorderPixels = countTimelineBorderPixels(firstFrame.rgba, [41, 44, 48, 255])
-    const finalBorderPixels = countTimelineBorderPixels(finalFrame.rgba, [41, 44, 48, 255])
+    const firstBorderPixels = countTimelineBorderPixels(firstFrame, [41, 44, 48, 255])
+    const finalBorderPixels = countTimelineBorderPixels(finalFrame, [41, 44, 48, 255])
     expect(firstBorderPixels).toBeGreaterThan(finalBorderPixels + 1200)
   })
 
@@ -519,7 +526,7 @@ function countColorPixels(rgba: Uint8Array, color: readonly [number, number, num
 }
 
 function countColorPixelsInRect(
-  rgba: Uint8Array,
+  frame: Pick<Frame, 'width' | 'height' | 'rgba'>,
   color: readonly [number, number, number, number],
   minX: number,
   minY: number,
@@ -527,15 +534,19 @@ function countColorPixelsInRect(
   maxY: number
 ): number {
   let count = 0
+  const left = Math.max(0, minX)
+  const top = Math.max(0, minY)
+  const right = Math.min(frame.width - 1, maxX)
+  const bottom = Math.min(frame.height - 1, maxY)
 
-  for (let y = minY; y <= maxY; y++) {
-    for (let x = minX; x <= maxX; x++) {
-      const offset = (y * FRAME_WIDTH + x) * 4
+  for (let y = top; y <= bottom; y++) {
+    for (let x = left; x <= right; x++) {
+      const offset = (y * frame.width + x) * 4
       if (
-        rgba[offset] === color[0] &&
-        rgba[offset + 1] === color[1] &&
-        rgba[offset + 2] === color[2] &&
-        rgba[offset + 3] === color[3]
+        frame.rgba[offset] === color[0] &&
+        frame.rgba[offset + 1] === color[1] &&
+        frame.rgba[offset + 2] === color[2] &&
+        frame.rgba[offset + 3] === color[3]
       ) {
         count += 1
       }
@@ -546,7 +557,7 @@ function countColorPixelsInRect(
 }
 
 function countPalettePixelsInRect(
-  rgba: Uint8Array,
+  frame: Pick<Frame, 'width' | 'height' | 'rgba'>,
   colors: ReadonlySet<string>,
   minX: number,
   minY: number,
@@ -556,13 +567,13 @@ function countPalettePixelsInRect(
   let count = 0
   const left = Math.max(0, minX)
   const top = Math.max(0, minY)
-  const right = Math.min(FRAME_WIDTH - 1, maxX)
-  const bottom = Math.min(FRAME_HEIGHT - 1, maxY)
+  const right = Math.min(frame.width - 1, maxX)
+  const bottom = Math.min(frame.height - 1, maxY)
 
   for (let y = top; y <= bottom; y++) {
     for (let x = left; x <= right; x++) {
-      const offset = (y * FRAME_WIDTH + x) * 4
-      const key = `${rgba[offset]},${rgba[offset + 1]},${rgba[offset + 2]},${rgba[offset + 3]}`
+      const offset = (y * frame.width + x) * 4
+      const key = `${frame.rgba[offset]},${frame.rgba[offset + 1]},${frame.rgba[offset + 2]},${frame.rgba[offset + 3]}`
       if (colors.has(key)) count += 1
     }
   }
@@ -570,12 +581,18 @@ function countPalettePixelsInRect(
   return count
 }
 
-function countTimelineBorderPixels(rgba: Uint8Array, color: readonly [number, number, number, number]): number {
+function countTimelineBorderPixels(
+  frame: Pick<Frame, 'width' | 'height' | 'rgba'>,
+  color: readonly [number, number, number, number]
+): number {
+  const right = frame.width - 8
+  const bottom = frame.height - 8
+
   return (
-    countColorPixelsInRect(rgba, color, 8, 8, 520, 14) +
-    countColorPixelsInRect(rgba, color, 514, 8, 520, 520) +
-    countColorPixelsInRect(rgba, color, 8, 514, 520, 520) +
-    countColorPixelsInRect(rgba, color, 8, 8, 14, 520)
+    countColorPixelsInRect(frame, color, 8, 8, right, 14) +
+    countColorPixelsInRect(frame, color, right - 6, 8, right, bottom) +
+    countColorPixelsInRect(frame, color, 8, bottom - 6, right, bottom) +
+    countColorPixelsInRect(frame, color, 8, 8, 14, bottom)
   )
 }
 

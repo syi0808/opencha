@@ -29,11 +29,11 @@ export const TEMPORAL_POINTER_GRID_CELL_DISPLAY_SIZES: Record<
 > = {
   N: { width: 270, height: 190 },
   NE: { width: 230, height: 230 },
-  E: { width: 190, height: 270 },
+  E: { width: 190, height: 340 },
   SE: { width: 230, height: 230 },
   S: { width: 270, height: 190 },
   SW: { width: 230, height: 230 },
-  W: { width: 190, height: 270 },
+  W: { width: 190, height: 340 },
   NW: { width: 230, height: 230 }
 }
 
@@ -53,8 +53,6 @@ const TEMPORAL_POINTER_GRID_SLOT_CENTER_ANGLES: Record<TemporalPointerGridSlot, 
   W: 180,
   NW: 225
 }
-const TEMPORAL_POINTER_GRID_CARDINAL_CHARACTER_SPAN_DEGREES = 38
-const TEMPORAL_POINTER_GRID_DIAGONAL_CHARACTER_SPAN_DEGREES = 12
 
 export function temporalPointerGridDisplaySize(
   slot: TemporalPointerGridRenderedSlot
@@ -97,10 +95,7 @@ export function temporalPointerGridCharacterAnchorRatio(
   characterIndex: number,
   characterCount: number
 ): { x: number; y: number } {
-  return temporalPointerGridAnchorRatioForAngle(
-    slot,
-    temporalPointerGridCharacterAngleDegrees(slot, characterIndex, characterCount)
-  )
+  return temporalPointerGridReadableCharacterRatio(slot, characterIndex, characterCount)
 }
 
 export function temporalPointerGridReadableCharacterRatio(
@@ -109,6 +104,7 @@ export function temporalPointerGridReadableCharacterRatio(
   characterCount: number
 ): { x: number; y: number } {
   const distributed = spreadRatio(characterIndex, characterCount)
+  const verticalDistributed = sideSpreadRatio(characterIndex, characterCount)
 
   switch (slot) {
     case 'N':
@@ -116,28 +112,28 @@ export function temporalPointerGridReadableCharacterRatio(
     case 'S':
       return { x: distributed, y: 0.52 }
     case 'W':
-      return { x: verticalReadableColumnRatio('W', characterIndex), y: distributed }
+      return { x: 0.5, y: verticalDistributed }
     case 'E':
-      return { x: verticalReadableColumnRatio('E', characterIndex), y: distributed }
+      return { x: 0.5, y: verticalDistributed }
     case 'NW':
       return diagonalReadableRatio(characterIndex, characterCount, [
-        { x: 0.25, y: 0.75 },
-        { x: 0.75, y: 0.25 }
+        { x: 0.34, y: 0.66 },
+        { x: 0.66, y: 0.34 }
       ])
     case 'NE':
       return diagonalReadableRatio(characterIndex, characterCount, [
-        { x: 0.25, y: 0.25 },
-        { x: 0.75, y: 0.75 }
+        { x: 0.34, y: 0.34 },
+        { x: 0.66, y: 0.66 }
       ])
     case 'SE':
       return diagonalReadableRatio(characterIndex, characterCount, [
-        { x: 0.75, y: 0.25 },
-        { x: 0.25, y: 0.75 }
+        { x: 0.66, y: 0.34 },
+        { x: 0.34, y: 0.66 }
       ])
     case 'SW':
       return diagonalReadableRatio(characterIndex, characterCount, [
-        { x: 0.75, y: 0.75 },
-        { x: 0.25, y: 0.25 }
+        { x: 0.66, y: 0.66 },
+        { x: 0.34, y: 0.34 }
       ])
   }
 }
@@ -147,8 +143,10 @@ export function temporalPointerGridCharacterAngleDegrees(
   characterIndex: number,
   characterCount: number
 ): number {
-  const offsets = temporalPointerGridCharacterAngleOffsets(slot, characterCount)
-  return temporalPointerGridTargetAngleDegrees(slot) + (offsets[characterIndex] ?? 0)
+  const metrics = temporalPointerGridTableMetrics()
+  const readable = temporalPointerGridReadableCharacterPoint(slot, characterIndex, characterCount)
+
+  return radiansToDegrees(Math.atan2(readable.y - metrics.centerY, readable.x - metrics.centerX))
 }
 
 export function temporalPointerGridCharacterTargets(
@@ -196,6 +194,11 @@ export function temporalPointerGridClosestCharacterTargetIndex(
   return selectedIndex
 }
 
+function temporalPointerGridDefaultCharacterTargets(): TemporalPointerCharacterTarget[] {
+  const defaultCodes = TEMPORAL_POINTER_GRID_SLOTS.map((slot) => 'X'.repeat(defaultCharacterCount(slot)))
+  return temporalPointerGridCharacterTargets(defaultCodes)
+}
+
 function temporalPointerGridAnchorRatioForAngle(
   slot: TemporalPointerGridSlot,
   angleDegrees: number
@@ -212,31 +215,6 @@ function temporalPointerGridAnchorRatioForAngle(
   }
 }
 
-function temporalPointerGridDefaultCharacterTargets(): TemporalPointerCharacterTarget[] {
-  const defaultCodes = TEMPORAL_POINTER_GRID_SLOTS.map((slot) => 'X'.repeat(defaultCharacterCount(slot)))
-  return temporalPointerGridCharacterTargets(defaultCodes)
-}
-
-function temporalPointerGridCharacterAngleOffsets(
-  slot: TemporalPointerGridSlot,
-  characterCount: number
-): number[] {
-  if (characterCount <= 1) return [0]
-
-  const span = slot.length === 1
-    ? TEMPORAL_POINTER_GRID_CARDINAL_CHARACTER_SPAN_DEGREES
-    : TEMPORAL_POINTER_GRID_DIAGONAL_CHARACTER_SPAN_DEGREES
-  const start = -span / 2
-  const step = span / (characterCount - 1)
-  const offsets = Array.from({ length: characterCount }, (_unused, index) => start + step * index)
-
-  return shouldReverseCharacterOffsets(slot) ? offsets.reverse() : offsets
-}
-
-function shouldReverseCharacterOffsets(slot: TemporalPointerGridSlot): boolean {
-  return slot === 'S' || slot === 'W'
-}
-
 function defaultCharacterCount(slot: TemporalPointerGridSlot): number {
   return slot.length === 1 ? 3 : 2
 }
@@ -249,11 +227,12 @@ function spreadRatio(index: number, count: number): number {
   return start + ((end - start) * index) / (count - 1)
 }
 
-function verticalReadableColumnRatio(slot: 'E' | 'W', index: number): number {
-  const isOuterColumn = index % 2 === 0
+function sideSpreadRatio(index: number, count: number): number {
+  if (count <= 1) return 0.5
 
-  if (slot === 'W') return isOuterColumn ? 0.32 : 0.58
-  return isOuterColumn ? 0.68 : 0.42
+  const start = 0.1
+  const end = 0.9
+  return start + ((end - start) * index) / (count - 1)
 }
 
 function diagonalReadableRatio(
@@ -285,6 +264,20 @@ export function temporalPointerGridImageRect(slot: TemporalPointerGridRenderedSl
     top: cellTop + (cellHeight - size.height) / 2,
     width: size.width,
     height: size.height
+  }
+}
+
+export function temporalPointerGridReadableCharacterPoint(
+  slot: TemporalPointerGridSlot,
+  characterIndex: number,
+  characterCount: number
+): { x: number; y: number } {
+  const rect = temporalPointerGridImageRect(slot)
+  const readable = temporalPointerGridReadableCharacterRatio(slot, characterIndex, characterCount)
+
+  return {
+    x: rect.left + readable.x * rect.width,
+    y: rect.top + readable.y * rect.height
   }
 }
 
@@ -360,4 +353,8 @@ function normalizeDegrees(value: number): number {
 
 function degreesToRadians(value: number): number {
   return (value * Math.PI) / 180
+}
+
+function radiansToDegrees(value: number): number {
+  return (value * 180) / Math.PI
 }

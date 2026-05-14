@@ -66,8 +66,6 @@ const WHEEL_SYMBOL_JITTER_Y_PX = [-1, 0, 1] as const
 const WHEEL_SYMBOL_ROTATION_DEGREES = [-7, -5, -3, 0, 3, 5, 7] as const
 const WHEEL_SYMBOL_SCALE_Y = [0.8, 0.84, 0.88] as const
 const GRID_LABEL_FONT_SIZE_VARIANTS = [22, 24, 26] as const
-const GRID_SYMBOL_JITTER_X_PX = [-4, -2, 0, 2, 4] as const
-const GRID_SYMBOL_JITTER_Y_PX = [-3, -1, 0, 1, 3] as const
 const GRID_SYMBOL_ROTATION_DEGREES = [-5, -3, 0, 3, 5] as const
 const GRID_SYMBOL_SCALE_Y = [0.88, 0.92, 0.96, 1] as const
 const TEMPORAL_GRID_ANCHOR_RADIUS = 3
@@ -264,8 +262,10 @@ function renderTemporalDirectionCellFrame(
       y: Math.round(base.y + character.style.offsetY + frameArt.heightPx / 2)
     }
 
-    drawLine(rgba, target.x, target.y, readableCenter.x, readableCenter.y, DUST)
-    drawTemporalTargetAnchor(rgba, target.x, target.y)
+    if (pointDistance(target, readableCenter) > 8) {
+      drawLine(rgba, target.x, target.y, readableCenter.x, readableCenter.y, DUST)
+      drawTemporalTargetAnchor(rgba, target.x, target.y)
+    }
     drawAsciiArtRowsTransformed(rgba, frameArt, base.x, base.y, TEXT, character.style)
   }
 
@@ -406,8 +406,8 @@ function temporalGridSymbolStyle(seed: string, symbolIndex: number, characterInd
       fontSize,
       tracking: selected.tracking
     },
-    offsetX: GRID_SYMBOL_JITTER_X_PX[random.nextInt(GRID_SYMBOL_JITTER_X_PX.length)] as number,
-    offsetY: GRID_SYMBOL_JITTER_Y_PX[random.nextInt(GRID_SYMBOL_JITTER_Y_PX.length)] as number,
+    offsetX: 0,
+    offsetY: 0,
     rotationDegrees: GRID_SYMBOL_ROTATION_DEGREES[
       random.nextInt(GRID_SYMBOL_ROTATION_DEGREES.length)
     ] as number,
@@ -913,6 +913,10 @@ function degreesToRadians(value: number): number {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), Math.max(min, max))
+}
+
+function pointDistance(left: { x: number; y: number }, right: { x: number; y: number }): number {
+  return Math.hypot(left.x - right.x, left.y - right.y)
 }
 
 function fillCircle(

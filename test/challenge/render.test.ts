@@ -12,6 +12,8 @@ import { createChallenge, createLegacySlideChallenge } from '../../src/challenge
 import {
   TEMPORAL_POINTER_GRID_TABLE_ROWS,
   temporalPointerGridCharacterAnchorRatio,
+  temporalPointerGridCharacterAngleDegrees,
+  temporalPointerGridImageRect,
   temporalPointerGridReadableCharacterRatio,
   temporalPointerGridDisplaySize
 } from '../../src/challenge/temporal-grid-layout'
@@ -32,7 +34,8 @@ import {
   CHALLENGE_CHARSET,
   CODE_LENGTH_MAX,
   LEGACY_SLIDE_CHALLENGE_VERSION,
-  TEMPORAL_POINTER_CHALLENGE_VERSION
+  TEMPORAL_POINTER_CHALLENGE_VERSION,
+  type TemporalPointerGridSlot
 } from '../../src/challenge/types'
 
 describe('challenge renderer', () => {
@@ -251,9 +254,10 @@ describe('challenge renderer', () => {
     }
   }, 10000)
 
-  it('places temporal grid GIFs with non-uniform sizes and character-level ring anchors', () => {
+  it('places temporal grid GIFs with non-uniform sizes and character-centered pointer targets', () => {
     expect(temporalPointerGridDisplaySize('center')).toEqual({ width: 230, height: 230 })
-    expect(temporalPointerGridDisplaySize('W')).toEqual({ width: 190, height: 270 })
+    expect(temporalPointerGridDisplaySize('W')).toEqual({ width: 190, height: 340 })
+    expect(temporalPointerGridDisplaySize('E')).toEqual({ width: 190, height: 340 })
     expect(temporalPointerGridDisplaySize('N')).toEqual({ width: 270, height: 190 })
     expect(temporalPointerGridDisplaySize('NE')).toEqual({ width: 230, height: 230 })
 
@@ -269,6 +273,12 @@ describe('challenge renderer', () => {
       const characterCount = slot.length === 1 ? 3 : 2
       for (let characterIndex = 0; characterIndex < characterCount; characterIndex++) {
         const anchor = temporalPointerGridCharacterAnchorRatio(slot, characterIndex, characterCount)
+        const readable = temporalPointerGridReadableCharacterRatio(slot, characterIndex, characterCount)
+        const angle = temporalPointerGridCharacterAngleDegrees(slot, characterIndex, characterCount)
+        const expectedAngle = readableCharacterAngleDegrees(slot, characterIndex, characterCount)
+
+        expect(anchor, `${slot} ${characterIndex} pointer anchor`).toEqual(readable)
+        expect(angularDistanceDegrees(angle, expectedAngle), `${slot} ${characterIndex} pointer angle`).toBeLessThan(0.000001)
         expect(anchor.x, `${slot} ${characterIndex} anchor x`).toBeGreaterThan(0.08)
         expect(anchor.x, `${slot} ${characterIndex} anchor x`).toBeLessThan(0.92)
         expect(anchor.y, `${slot} ${characterIndex} anchor y`).toBeGreaterThan(0.08)
@@ -279,8 +289,14 @@ describe('challenge renderer', () => {
     const westAnchors = [0, 1, 2].map((index) => temporalPointerGridCharacterAnchorRatio('W', index, 3))
     expect(westAnchors[0]!.y).toBeLessThan(westAnchors[1]!.y)
     expect(westAnchors[1]!.y).toBeLessThan(westAnchors[2]!.y)
-    expect(Math.max(...westAnchors.map((anchor) => anchor.x)) - Math.min(...westAnchors.map((anchor) => anchor.x)))
-      .toBeLessThan(0.18)
+    expect(westAnchors.map((anchor) => anchor.x)).toEqual([0.5, 0.5, 0.5])
+    expect(westAnchors[1]!.y - westAnchors[0]!.y).toBeGreaterThan(0.38)
+    expect(westAnchors[2]!.y - westAnchors[1]!.y).toBeGreaterThan(0.38)
+
+    const eastAnchors = [0, 1, 2].map((index) => temporalPointerGridCharacterAnchorRatio('E', index, 3))
+    expect(eastAnchors.map((anchor) => anchor.x)).toEqual([0.5, 0.5, 0.5])
+    expect(eastAnchors[0]!.y).toBeLessThan(eastAnchors[1]!.y)
+    expect(eastAnchors[1]!.y).toBeLessThan(eastAnchors[2]!.y)
 
     const northAnchors = [0, 1, 2].map((index) => temporalPointerGridCharacterAnchorRatio('N', index, 3))
     expect(northAnchors[0]!.x).toBeLessThan(northAnchors[1]!.x)
@@ -305,8 +321,16 @@ describe('challenge renderer', () => {
       expect(Math.sign(anchorDeltaY), `${slot} anchor y direction`).toBe(yDirection)
       expect(Math.sign(readableDeltaX), `${slot} readable x direction`).toBe(xDirection)
       expect(Math.sign(readableDeltaY), `${slot} readable y direction`).toBe(yDirection)
-      expect(Math.abs(readableDeltaX), `${slot} readable x separation`).toBeGreaterThan(0.45)
-      expect(Math.abs(readableDeltaY), `${slot} readable y separation`).toBeGreaterThan(0.45)
+      expect(Math.abs(readableDeltaX), `${slot} readable x separation`).toBeGreaterThan(0.28)
+      expect(Math.abs(readableDeltaX), `${slot} readable x separation`).toBeLessThan(0.4)
+      expect(Math.abs(readableDeltaY), `${slot} readable y separation`).toBeGreaterThan(0.28)
+      expect(Math.abs(readableDeltaY), `${slot} readable y separation`).toBeLessThan(0.4)
+      for (const point of readable) {
+        expect(point.x, `${slot} centered x`).toBeGreaterThan(0.3)
+        expect(point.x, `${slot} centered x`).toBeLessThan(0.7)
+        expect(point.y, `${slot} centered y`).toBeGreaterThan(0.3)
+        expect(point.y, `${slot} centered y`).toBeLessThan(0.7)
+      }
     }
   })
 
@@ -585,6 +609,31 @@ function colorKey(color: readonly [number, number, number, number]): string {
 function colorFromKey(key: string): [number, number, number, number] {
   const [red, green, blue, alpha] = key.split(',').map(Number)
   return [red ?? 0, green ?? 0, blue ?? 0, alpha ?? 255]
+}
+
+function readableCharacterAngleDegrees(
+  slot: TemporalPointerGridSlot,
+  characterIndex: number,
+  characterCount: number
+): number {
+  const center = temporalPointerGridImageRect('center')
+  const cell = temporalPointerGridImageRect(slot)
+  const readable = temporalPointerGridReadableCharacterRatio(slot, characterIndex, characterCount)
+  const centerX = center.left + center.width / 2
+  const centerY = center.top + center.height / 2
+  const characterX = cell.left + readable.x * cell.width
+  const characterY = cell.top + readable.y * cell.height
+
+  return (Math.atan2(characterY - centerY, characterX - centerX) * 180) / Math.PI
+}
+
+function angularDistanceDegrees(left: number, right: number): number {
+  const delta = Math.abs(normalizeDegrees(left) - normalizeDegrees(right))
+  return Math.min(delta, 360 - delta)
+}
+
+function normalizeDegrees(value: number): number {
+  return ((value % 360) + 360) % 360
 }
 
 function contrastRatio(

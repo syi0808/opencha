@@ -67,7 +67,7 @@ describe('OpenCHA comments', () => {
     expect(body).toContain('OpenCHA pointer')
     expect(body).toContain('OpenCHA pointer" width="230" height="230"')
     expect(body).toContain('OpenCHA cell NW')
-    expect(body).toContain('OpenCHA cell W" width="190" height="270"')
+    expect(body).toContain('OpenCHA cell W" width="190" height="340"')
     expect(body).toContain('OpenCHA cell N" width="270" height="190"')
     expect(body).toContain('/opencha answer YOUR_CODE')
     expect(body).not.toContain('1st code')

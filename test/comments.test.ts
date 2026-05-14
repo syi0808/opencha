@@ -65,7 +65,7 @@ describe('OpenCHA comments', () => {
     expect(body).toContain('Record the character')
     expect(body).toContain('<table cellspacing="0" cellpadding="0">')
     expect(body).toContain('OpenCHA pointer')
-    expect(body).toContain('OpenCHA pointer" width="184" height="184"')
+    expect(body).toContain('OpenCHA pointer" width="239" height="239"')
     expect(body).toContain('OpenCHA cell NW')
     expect(body).toContain('OpenCHA cell W" width="152" height="272"')
     expect(body).toContain('OpenCHA cell N" width="216" height="152"')

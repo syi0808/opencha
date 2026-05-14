@@ -45,8 +45,17 @@ export const FRAME_DELAY_MS = 90
 export const CODE_HOLD_FRAMES = 5
 export const TEMPORAL_DIRECTION_CELL_LOOP_FRAMES = 12
 export const TEMPORAL_GIF_SCALE = 0.8
-export const TEMPORAL_POINTER_FRAME_WIDTH = scaleTemporalDimension(FRAME_WIDTH)
-export const TEMPORAL_POINTER_FRAME_HEIGHT = scaleTemporalDimension(FRAME_HEIGHT)
+export const TEMPORAL_CENTER_POINTER_SCALE = 1.3
+export const TEMPORAL_DIRECTION_CELL_FRAME_WIDTH = scaleTemporalDimension(FRAME_WIDTH)
+export const TEMPORAL_DIRECTION_CELL_FRAME_HEIGHT = scaleTemporalDimension(FRAME_HEIGHT)
+export const TEMPORAL_POINTER_FRAME_WIDTH = scaleTemporalDimension(
+  FRAME_WIDTH,
+  TEMPORAL_GIF_SCALE * TEMPORAL_CENTER_POINTER_SCALE
+)
+export const TEMPORAL_POINTER_FRAME_HEIGHT = scaleTemporalDimension(
+  FRAME_HEIGHT,
+  TEMPORAL_GIF_SCALE * TEMPORAL_CENTER_POINTER_SCALE
+)
 const TEMPORAL_SIDE_CELL_SOURCE_FRAME_WIDTH = 380
 const TEMPORAL_SIDE_CELL_SOURCE_FRAME_HEIGHT = 680
 export const TEMPORAL_SIDE_CELL_FRAME_WIDTH = scaleTemporalDimension(TEMPORAL_SIDE_CELL_SOURCE_FRAME_WIDTH)
@@ -301,12 +310,12 @@ function temporalDirectionCellFrameSize(symbolIndex: number): { width: number; h
 
 function temporalDirectionCellOutputFrameWidth(symbolIndex: number): number {
   const slot = TEMPORAL_POINTER_GRID_SLOTS[symbolIndex]
-  return slot === 'W' || slot === 'E' ? TEMPORAL_SIDE_CELL_FRAME_WIDTH : TEMPORAL_POINTER_FRAME_WIDTH
+  return slot === 'W' || slot === 'E' ? TEMPORAL_SIDE_CELL_FRAME_WIDTH : TEMPORAL_DIRECTION_CELL_FRAME_WIDTH
 }
 
 function temporalDirectionCellOutputFrameHeight(symbolIndex: number): number {
   const slot = TEMPORAL_POINTER_GRID_SLOTS[symbolIndex]
-  return slot === 'W' || slot === 'E' ? TEMPORAL_SIDE_CELL_FRAME_HEIGHT : TEMPORAL_POINTER_FRAME_HEIGHT
+  return slot === 'W' || slot === 'E' ? TEMPORAL_SIDE_CELL_FRAME_HEIGHT : TEMPORAL_DIRECTION_CELL_FRAME_HEIGHT
 }
 
 export function hasTinyAsciiGlyph(symbol: string): boolean {
@@ -1000,8 +1009,8 @@ function pointDistance(left: { x: number; y: number }, right: { x: number; y: nu
   return Math.hypot(left.x - right.x, left.y - right.y)
 }
 
-function scaleTemporalDimension(value: number): number {
-  return Math.max(1, Math.round(value * TEMPORAL_GIF_SCALE))
+function scaleTemporalDimension(value: number, scale = TEMPORAL_GIF_SCALE): number {
+  return Math.max(1, Math.round(value * scale))
 }
 
 function scaleFrame(frame: Frame, width: number, height: number): Frame {

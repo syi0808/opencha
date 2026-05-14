@@ -1,17 +1,32 @@
 import { SeededRandom } from './random'
 import {
+  temporalPointerGridCharacterTargets,
+  temporalPointerGridClosestCharacterTargetIndex,
+  temporalPointerGridTargetAngleDegreesByIndex
+} from './temporal-grid-layout'
+import {
   CHALLENGE_CHARSET,
   CODE_LENGTH_MAX,
   CODE_LENGTH_MIN,
   LOWERCASE_CONFUSABLE_CHARS,
   NOISE_LEVEL,
+  TEMPORAL_GRID_CELL_CODE_LENGTH_MAX,
+  TEMPORAL_GRID_CELL_CODE_LENGTH_MIN,
   TEMPORAL_POINTER_CHALLENGE_VERSION,
+  TEMPORAL_POINTER_GRID_SLOTS,
+  TEMPORAL_POINTER_GRID_LAYOUT,
   TEMPORAL_POINTER_KIND,
   type TemporalPointerDisplayModel,
+  type TemporalPointerDirection,
+  type TemporalPointerGridSlot,
   type TemporalPointerFrameCue
 } from './types'
 
-export const TEMPORAL_RING_SIZE = 18
+export const TEMPORAL_DIRECTION_COUNT = TEMPORAL_POINTER_GRID_SLOTS.length
+export const TEMPORAL_RING_SIZE = TEMPORAL_POINTER_GRID_SLOTS.reduce(
+  (total, slot) => total + (slot.length === 1 ? TEMPORAL_GRID_CELL_CODE_LENGTH_MAX : TEMPORAL_GRID_CELL_CODE_LENGTH_MIN),
+  0
+)
 export const TEMPORAL_CAPTURE_HOLD_FRAMES = 5
 export const TEMPORAL_NEAR_MISS_HOLD_FRAMES = 3
 export const TEMPORAL_TRAVEL_FRAMES_MIN = 12
@@ -20,8 +35,6 @@ export const TEMPORAL_INTRO_FRAMES = 6
 export const TEMPORAL_OUTRO_FRAMES = 6
 export const TEMPORAL_FRAME_DELAY_MS = 90
 
-const MAX_ANSWER_ATTEMPTS = 64
-const MAX_WHEEL_SHUFFLE_ATTEMPTS = 256
 const CONTINUOUS_ROTATION_START_FRAME = 2
 
 export interface CreateTemporalPointerDisplayOptions {
@@ -33,43 +46,45 @@ export function createTemporalPointerDisplay(
 ): TemporalPointerDisplayModel {
   const random = new SeededRandom(`${options.seed}:temporal-pointer`)
 
-  for (let attempt = 0; attempt < MAX_ANSWER_ATTEMPTS; attempt++) {
-    const canonicalAnswer = generateTemporalAnswer(random)
-    const canonicalWheelSymbols = buildLeakFreeWheel(random, canonicalAnswer)
-    if (!canonicalWheelSymbols) continue
+  const wheelSymbols = generateDirectionCodes(random)
+  const characterTargets = temporalPointerGridCharacterTargets(wheelSymbols)
+  const captureIndexes = generateCaptureIndexes(random, characterTargets)
+  const captureTargets = captureIndexes.map((index) => characterTargets[index]!)
+  const answer = captureTargets.map((target) => target.character).join('')
+  const captureSlots = captureTargets.map((target) => target.slot)
 
-    const wheelSymbols = applyTemporalCaseVariants(options.seed, canonicalWheelSymbols)
-    const answer = applyWheelCaseToAnswer(canonicalAnswer, canonicalWheelSymbols, wheelSymbols)
+  const decoyPauseCount = 0
+  const timeline = buildPointerTimeline({
+    seed: options.seed,
+    targets: characterTargets,
+    captureIndexes,
+    decoyPauseCount
+  })
 
-    const decoyPauseCount = 0
-    const timeline = buildPointerTimeline({
-      seed: options.seed,
-      answer,
-      wheelSymbols,
-      decoyPauseCount
-    })
-
-    return {
-      version: TEMPORAL_POINTER_CHALLENGE_VERSION,
+  return {
+    version: TEMPORAL_POINTER_CHALLENGE_VERSION,
+    kind: TEMPORAL_POINTER_KIND,
+    seed: options.seed,
+    answer,
+    wheelSymbols,
+    characterTargets,
+    captureTargets,
+    captureSlots,
+    captureDirections: captureSlots,
+    timeline,
+    params: {
       kind: TEMPORAL_POINTER_KIND,
-      seed: options.seed,
-      answer,
-      wheelSymbols,
-      timeline,
-      params: {
-        kind: TEMPORAL_POINTER_KIND,
-        codeLength: answer.length,
-        ringSize: TEMPORAL_RING_SIZE,
-        captureCount: answer.length,
-        decoyPauseCount,
-        frameDelayMs: TEMPORAL_FRAME_DELAY_MS,
-        charset: CHALLENGE_CHARSET,
-        noiseLevel: NOISE_LEVEL
-      }
+      layout: TEMPORAL_POINTER_GRID_LAYOUT,
+      codeLength: answer.length,
+      cellCodeLengths: wheelSymbols.map((symbol) => symbol.length),
+      ringSize: TEMPORAL_RING_SIZE,
+      captureCount: captureIndexes.length,
+      decoyPauseCount,
+      frameDelayMs: TEMPORAL_FRAME_DELAY_MS,
+      charset: CHALLENGE_CHARSET,
+      noiseLevel: NOISE_LEVEL
     }
   }
-
-  throw new Error('Unable to create temporal pointer challenge without a static ring leak.')
 }
 
 export function ringContainsAnswerInAnyRotation(
@@ -86,128 +101,191 @@ export function visibleStringsForTemporalPointerFrame(
   display: TemporalPointerDisplayModel,
   cue: TemporalPointerFrameCue
 ): string[] {
+  const target = display.characterTargets[cue.pointedSymbolIndex]
   return [
-    display.wheelSymbols.join(''),
-    display.wheelSymbols[cue.pointedSymbolIndex] ?? '',
+    target ? `${target.slot}:${target.characterIndex}` : '',
     '.'.repeat(cue.completedCaptures)
   ]
 }
 
 export function temporalPointerSymbolAngleDegrees(index: number, symbolCount: number): number {
+  if (symbolCount === TEMPORAL_RING_SIZE) {
+    return temporalPointerGridTargetAngleDegreesByIndex(index)
+  }
+
   return -90 + (index * 360) / symbolCount
 }
 
 export function temporalPointerAngleToSymbolIndex(angleDegrees: number, symbolCount: number): number {
+  if (symbolCount === TEMPORAL_RING_SIZE) {
+    return temporalPointerGridClosestCharacterTargetIndex(
+      angleDegrees,
+      temporalPointerGridCharacterTargets(
+        TEMPORAL_POINTER_GRID_SLOTS.map((slot) =>
+          'X'.repeat(slot.length === 1 ? TEMPORAL_GRID_CELL_CODE_LENGTH_MAX : TEMPORAL_GRID_CELL_CODE_LENGTH_MIN)
+        )
+      )
+    )
+  }
+
   const step = 360 / symbolCount
   const normalized = normalizeDegrees(angleDegrees - temporalPointerSymbolAngleDegrees(0, symbolCount))
   return Math.round(normalized / step) % symbolCount
 }
 
-function generateTemporalAnswer(random: SeededRandom): string {
+function generateCaptureIndexes(
+  random: SeededRandom,
+  targets: readonly ReturnType<typeof temporalPointerGridCharacterTargets>[number][]
+): number[] {
   const length = CODE_LENGTH_MIN + random.nextInt(CODE_LENGTH_MAX - CODE_LENGTH_MIN + 1)
-  let answer = ''
+  const indexes: number[] = []
 
   for (let index = 0; index < length; index++) {
-    answer += CHALLENGE_CHARSET[random.nextInt(CHALLENGE_CHARSET.length)] as string
+    let candidate = random.nextInt(targets.length)
+    while (indexes.length > 0 && indexes[indexes.length - 1] === candidate) {
+      candidate = random.nextInt(targets.length)
+    }
+    indexes.push(candidate)
   }
 
-  return answer
+  ensureOffCenterCapture(indexes, targets, random)
+  return indexes
 }
 
-function buildLeakFreeWheel(random: SeededRandom, answer: string): string[] | null {
-  const symbols = uniqueSymbols(answer)
-  const decoys = shuffle(
-    [...CHALLENGE_CHARSET].filter((symbol) => !symbols.includes(symbol)),
-    random
-  ).slice(0, TEMPORAL_RING_SIZE - symbols.length)
-  const candidates = [...symbols, ...decoys]
+function generateDirectionCodes(random: SeededRandom): string[] {
+  const codes: string[] = []
+  const usedCharacters = new Set<string>()
 
-  for (let attempt = 0; attempt < MAX_WHEEL_SHUFFLE_ATTEMPTS; attempt++) {
-    const wheel = shuffle(candidates, random)
-    if (!ringContainsAnswerInAnyRotation(wheel, answer)) {
-      return wheel
+  for (const direction of TEMPORAL_POINTER_GRID_SLOTS) {
+    const length = temporalDirectionCodeLength(direction)
+    codes.push(generateDirectionCode(random, length, usedCharacters))
+  }
+
+  enforceDirectionCodeCaseVariety(codes, random)
+  return codes
+}
+
+function temporalDirectionCodeLength(direction: TemporalPointerDirection): number {
+  return direction.length === 1 ? TEMPORAL_GRID_CELL_CODE_LENGTH_MAX : TEMPORAL_GRID_CELL_CODE_LENGTH_MIN
+}
+
+function generateDirectionCode(random: SeededRandom, length: number, usedCharacters: Set<string>): string {
+  let code = ''
+
+  for (let index = 0; index < length; index++) {
+    let symbol = CHALLENGE_CHARSET[random.nextInt(CHALLENGE_CHARSET.length)] as string
+    while (usedCharacters.has(symbol.toUpperCase())) {
+      symbol = CHALLENGE_CHARSET[random.nextInt(CHALLENGE_CHARSET.length)] as string
+    }
+
+    usedCharacters.add(symbol.toUpperCase())
+    code += mixTemporalCase(symbol, random)
+  }
+
+  return code
+}
+
+function ensureOffCenterCapture(
+  indexes: number[],
+  targets: readonly ReturnType<typeof temporalPointerGridCharacterTargets>[number][],
+  random: SeededRandom
+): void {
+  if (indexes.some((index) => isOffCenterTarget(targets[index]))) return
+
+  const replacementCandidates = targets
+    .map((target, index) => ({ target, index }))
+    .filter(({ target }) => isOffCenterTarget(target))
+  if (replacementCandidates.length === 0 || indexes.length === 0) return
+
+  const replaceAtIndex = random.nextInt(indexes.length)
+  let replacement = replacementCandidates[random.nextInt(replacementCandidates.length)]!
+  const previous = indexes[replaceAtIndex - 1]
+  const next = indexes[replaceAtIndex + 1]
+  let attempts = 0
+
+  while ((replacement.index === previous || replacement.index === next) && attempts < replacementCandidates.length * 2) {
+    replacement = replacementCandidates[random.nextInt(replacementCandidates.length)]!
+    attempts += 1
+  }
+
+  indexes[replaceAtIndex] = replacement.index
+}
+
+function isOffCenterTarget(
+  target: ReturnType<typeof temporalPointerGridCharacterTargets>[number] | undefined
+): boolean {
+  if (!target) return false
+
+  const slotLength = temporalDirectionCodeLength(target.slot)
+  return target.characterIndex !== Math.floor(slotLength / 2) || slotLength % 2 === 0
+}
+
+function enforceDirectionCodeCaseVariety(codes: string[], random: SeededRandom): void {
+  if (!codes.join('').match(/[a-z]/)) {
+    for (let attempt = 0; attempt < codes.length * 4; attempt++) {
+      const codeIndex = random.nextInt(codes.length)
+      const code = codes[codeIndex] as string
+      const charIndex = random.nextInt(code.length)
+      const symbol = code[charIndex] as string
+      if (!isCaseVariantSymbol(symbol.toUpperCase())) continue
+
+      codes[codeIndex] = replaceAt(code, charIndex, symbol.toLowerCase())
+      break
     }
   }
 
-  return null
-}
-
-function applyTemporalCaseVariants(seed: string, wheelSymbols: readonly string[]): string[] {
-  const random = new SeededRandom(`${seed}:temporal-pointer:case-variants`)
-  const result = wheelSymbols.map((symbol) =>
-    isCaseVariantSymbol(symbol) && random.nextInt(2) === 0 ? symbol.toLowerCase() : symbol
-  )
-  const letterIndexes = wheelSymbols
-    .map((symbol, index) => ({ symbol, index }))
-    .filter(({ symbol }) => isCaseVariantSymbol(symbol))
-
-  if (letterIndexes.length >= 2) {
-    if (!letterIndexes.some(({ index }) => result[index] === result[index]?.toLowerCase())) {
-      const selected = letterIndexes[random.nextInt(letterIndexes.length)]!
-      result[selected.index] = selected.symbol.toLowerCase()
-    }
-
-    if (!letterIndexes.some(({ index }) => result[index] === result[index]?.toUpperCase())) {
-      const candidates = letterIndexes.filter(({ index }) => result[index] !== result[index]?.toUpperCase())
-      const selected = candidates[random.nextInt(candidates.length)] ?? letterIndexes[0]!
-      result[selected.index] = selected.symbol.toUpperCase()
-    }
+  if (!codes.join('').match(/[A-Z]/)) {
+    const codeIndex = random.nextInt(codes.length)
+    const code = codes[codeIndex] as string
+    const charIndex = random.nextInt(code.length)
+    codes[codeIndex] = replaceAt(code, charIndex, (code[charIndex] as string).toUpperCase())
   }
-
-  return result
 }
 
-function applyWheelCaseToAnswer(
-  canonicalAnswer: string,
-  canonicalWheelSymbols: readonly string[],
-  wheelSymbols: readonly string[]
-): string {
-  return [...canonicalAnswer]
-    .map((symbol) => wheelSymbols[canonicalWheelSymbols.indexOf(symbol)] ?? symbol)
-    .join('')
+function mixTemporalCase(symbol: string, random: SeededRandom): string {
+  return isCaseVariantSymbol(symbol) && random.nextInt(2) === 0 ? symbol.toLowerCase() : symbol
 }
 
 function isCaseVariantSymbol(symbol: string): boolean {
   return /^[A-Z]$/.test(symbol) && !LOWERCASE_CONFUSABLE_CHARS.includes(symbol)
 }
 
+function replaceAt(value: string, index: number, replacement: string): string {
+  return `${value.slice(0, index)}${replacement}${value.slice(index + 1)}`
+}
+
 function buildPointerTimeline(input: {
   seed: string
-  answer: string
-  wheelSymbols: readonly string[]
+  targets: readonly ReturnType<typeof temporalPointerGridCharacterTargets>[number][]
+  captureIndexes: readonly number[]
   decoyPauseCount: number
 }): TemporalPointerFrameCue[] {
   const random = new SeededRandom(`${input.seed}:temporal-pointer:timeline`)
   const timeline: TemporalPointerFrameCue[] = []
-  let currentAngle = temporalPointerSymbolAngleDegrees(0, input.wheelSymbols.length)
+  let currentAngle = input.targets[0]?.angleDegrees ?? -90
   let completedCaptures = 0
-  const decoyBeforeCaptures = selectDecoyBeforeCaptures(random, input.answer.length, input.decoyPauseCount)
+  const decoyBeforeCaptures = selectDecoyBeforeCaptures(random, input.captureIndexes.length, input.decoyPauseCount)
 
-  appendRotation(timeline, currentAngle, currentAngle + 360, TEMPORAL_INTRO_FRAMES, input.wheelSymbols.length, completedCaptures)
+  appendRotation(timeline, currentAngle, currentAngle + 360, TEMPORAL_INTRO_FRAMES, input.targets, completedCaptures)
   currentAngle += 360
 
-  for (let captureIndex = 0; captureIndex < input.answer.length; captureIndex++) {
+  for (let captureIndex = 0; captureIndex < input.captureIndexes.length; captureIndex++) {
+    const targetIndex = input.captureIndexes[captureIndex] as number
     if (decoyBeforeCaptures.has(captureIndex)) {
-      const decoyIndex = selectNearMissIndex(random, input.wheelSymbols, input.answer[captureIndex] as string)
-      const decoyAngle = nextClockwiseAngle(currentAngle, temporalPointerSymbolAngleDegrees(decoyIndex, input.wheelSymbols.length))
+      const decoyIndex = selectNearMissIndex(random, input.targets.length, targetIndex)
+      const decoyAngle = nextClockwiseAngle(currentAngle, input.targets[decoyIndex]?.angleDegrees ?? -90)
       const travelFrames = randomTravelFrames(random)
-      appendRotation(timeline, currentAngle, decoyAngle, travelFrames, input.wheelSymbols.length, completedCaptures)
+      appendRotation(timeline, currentAngle, decoyAngle, travelFrames, input.targets, completedCaptures)
       currentAngle = decoyAngle
       appendHold(timeline, currentAngle, decoyIndex, TEMPORAL_NEAR_MISS_HOLD_FRAMES, 'near-miss', null, completedCaptures)
     }
 
-    const targetSymbol = input.answer[captureIndex] as string
-    const targetIndex = input.wheelSymbols.indexOf(targetSymbol)
-    if (targetIndex < 0) {
-      throw new Error(`Temporal pointer wheel is missing answer symbol ${targetSymbol}.`)
-    }
-
     const targetAngle = nextClockwiseAngle(
       currentAngle,
-      temporalPointerSymbolAngleDegrees(targetIndex, input.wheelSymbols.length)
+      input.targets[targetIndex]?.angleDegrees ?? -90
     )
     const travelFrames = randomTravelFrames(random)
-    appendRotation(timeline, currentAngle, targetAngle, travelFrames, input.wheelSymbols.length, completedCaptures)
+    appendRotation(timeline, currentAngle, targetAngle, travelFrames, input.targets, completedCaptures)
     currentAngle = targetAngle
     completedCaptures += 1
     appendHold(
@@ -221,7 +299,7 @@ function buildPointerTimeline(input: {
     )
   }
 
-  appendRotation(timeline, currentAngle, currentAngle + 360, TEMPORAL_OUTRO_FRAMES, input.wheelSymbols.length, completedCaptures)
+  appendRotation(timeline, currentAngle, currentAngle + 360, TEMPORAL_OUTRO_FRAMES, input.targets, completedCaptures)
   return timeline.map((cue, frameIndex) => ({ ...cue, frameIndex }))
 }
 
@@ -230,7 +308,7 @@ function appendRotation(
   startAngle: number,
   endAngle: number,
   frameCount: number,
-  symbolCount: number,
+  targets: readonly ReturnType<typeof temporalPointerGridCharacterTargets>[number][],
   completedCaptures: number
 ): void {
   const startFrame = shouldSkipDuplicateRotationStart(timeline, startAngle)
@@ -243,7 +321,7 @@ function appendRotation(
     timeline.push({
       frameIndex: timeline.length,
       pointerAngleDegrees: angle,
-      pointedSymbolIndex: temporalPointerAngleToSymbolIndex(angle, symbolCount),
+      pointedSymbolIndex: temporalPointerGridClosestCharacterTargetIndex(angle, targets),
       kind: 'rotation',
       captureIndex: null,
       completedCaptures
@@ -291,13 +369,14 @@ function selectDecoyBeforeCaptures(random: SeededRandom, captureCount: number, d
 
 function selectNearMissIndex(
   random: SeededRandom,
-  wheelSymbols: readonly string[],
-  nextTargetSymbol: string
+  directionCount: number,
+  targetIndex: number
 ): number {
-  const candidates = wheelSymbols
-    .map((symbol, index) => ({ symbol, index }))
-    .filter((candidate) => candidate.symbol !== nextTargetSymbol)
-  return (random.pick(candidates).index)
+  let selected = random.nextInt(directionCount)
+  while (selected === targetIndex) {
+    selected = random.nextInt(directionCount)
+  }
+  return selected
 }
 
 function randomTravelFrames(random: SeededRandom): number {
@@ -314,20 +393,6 @@ function normalizeDegrees(value: number): number {
 
 function anglesEqual(left: number, right: number): boolean {
   return Math.abs(left - right) < 0.000001
-}
-
-function uniqueSymbols(value: string): string[] {
-  const seen = new Set<string>()
-  const symbols: string[] = []
-
-  for (const symbol of value) {
-    if (!seen.has(symbol)) {
-      seen.add(symbol)
-      symbols.push(symbol)
-    }
-  }
-
-  return symbols
 }
 
 function shuffle<T>(items: readonly T[], random: SeededRandom): T[] {

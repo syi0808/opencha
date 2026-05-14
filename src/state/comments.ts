@@ -1,4 +1,14 @@
-import { TEMPORAL_POINTER_CHALLENGE_VERSION, TEMPORAL_POINTER_KIND } from '../challenge/types'
+import {
+  TEMPORAL_POINTER_CHALLENGE_VERSION,
+  TEMPORAL_POINTER_GRID_LAYOUT,
+  TEMPORAL_POINTER_KIND,
+  type TemporalPointerDirection
+} from '../challenge/types'
+import {
+  TEMPORAL_POINTER_GRID_TABLE_ROWS,
+  temporalPointerGridDisplaySize,
+  type TemporalPointerGridRenderedSlot
+} from '../challenge/temporal-grid-layout'
 import { StateRecordError } from '../errors'
 import { aux, fmt, scan } from './format'
 import { attemptsRemaining, type ChallengePayload } from './payload'
@@ -42,6 +52,7 @@ export function extractEncryptedPayload(body: string): string | null {
 export function renderChallengeComment(input: ChallengeCommentInput): string {
   const cooldownText = renderCooldownUntil(input.payload, input.now)
   const temporalPointer = isTemporalPointerPayload(input.payload)
+  const temporalGrid = isTemporalPointerGridPayload(input.payload)
   const cooldownLines = cooldownText
     ? [
         '',
@@ -50,13 +61,19 @@ export function renderChallengeComment(input: ChallengeCommentInput): string {
       ]
     : []
 
-  const statusLines = temporalPointer
-    ? renderTemporalPointerStatusLines(input.payload)
+  const statusLines = temporalGrid
+    ? renderTemporalPointerGridStatusLines(input.payload)
+    : temporalPointer
+      ? renderTemporalPointerStatusLines(input.payload)
     : renderLegacySlideStatusLines(input)
-  const instructionLines = temporalPointer
+  const instructionLines = temporalGrid
     ? [
-        'Watch the pointer. Record each symbol where the arrow briefly pauses, then reply with the captured sequence.'
+        'Watch the center pointer. Record the character where the arrow briefly pauses, then reply with the captured sequence.'
       ]
+    : temporalPointer
+      ? [
+          'Watch the pointer. Record each symbol where the arrow briefly pauses, then reply with the captured sequence.'
+        ]
     : []
 
   return [
@@ -69,7 +86,7 @@ export function renderChallengeComment(input: ChallengeCommentInput): string {
     ...statusLines,
     ...cooldownLines,
     '',
-    `![OpenCHA challenge](${input.assetUrl})`,
+    ...renderChallengeMedia(input, temporalPointer),
     '',
     ...instructionLines,
     ...(instructionLines.length > 0 ? [''] : []),
@@ -92,6 +109,50 @@ export function renderChallengeComment(input: ChallengeCommentInput): string {
     '',
     `${SLOT_OPEN}${input.encryptedPayload}${SLOT_CLOSE}`
   ].join('\n')
+}
+
+function renderChallengeMedia(input: ChallengeCommentInput, temporalPointer: boolean): string[] {
+  const layout = input.payload.asset?.layout
+  if (temporalPointer && layout?.kind === TEMPORAL_POINTER_GRID_LAYOUT) {
+    return renderTemporalPointerGrid(layout)
+  }
+
+  return [`![OpenCHA challenge](${input.assetUrl})`]
+}
+
+function renderTemporalPointerGrid(layout: NonNullable<ChallengePayload['asset']>['layout']): string[] {
+  if (!layout) return []
+  const urls = new Map(layout.cells.map((cell) => [cell.direction, cell.url]))
+
+  return [
+    '<table cellspacing="0" cellpadding="0">',
+    ...TEMPORAL_POINTER_GRID_TABLE_ROWS.map((row) => renderTemporalPointerGridRow(row, urls, layout.center)),
+    '</table>'
+  ]
+}
+
+function renderTemporalPointerGridRow(
+  slots: readonly TemporalPointerGridRenderedSlot[],
+  urls: ReadonlyMap<TemporalPointerDirection, string>,
+  centerUrl?: string
+): string {
+  const cells = slots.map((slot) => {
+    const url = slot === 'center' ? centerUrl : urls.get(slot)
+    if (!url) return '<td></td>'
+    const label = slot === 'center' ? 'pointer' : `cell ${slot}`
+    const size = temporalPointerGridDisplaySize(slot)
+    return `<td align="center" valign="middle"><img src="${url}" alt="OpenCHA ${label}" width="${size.width}" height="${size.height}"></td>`
+  })
+
+  return `<tr>${cells.join('')}</tr>`
+}
+
+function renderTemporalPointerGridStatusLines(payload: ChallengePayload): string[] {
+  return [
+    '| Status | Challenge | Attempts |',
+    '| --- | --- | ---: |',
+    `| ⏳ Waiting for answer | 8-cell ring grid | **${attemptsRemaining(payload)} left** |`
+  ]
 }
 
 function renderTemporalPointerStatusLines(payload: ChallengePayload): string[] {
@@ -216,6 +277,14 @@ function isTemporalPointerPayload(payload: ChallengePayload): boolean {
     payload.challengeVersion === TEMPORAL_POINTER_CHALLENGE_VERSION &&
     'kind' in payload.challengeParams &&
     payload.challengeParams.kind === TEMPORAL_POINTER_KIND
+  )
+}
+
+function isTemporalPointerGridPayload(payload: ChallengePayload): boolean {
+  return (
+    isTemporalPointerPayload(payload) &&
+    'layout' in payload.challengeParams &&
+    payload.challengeParams.layout === TEMPORAL_POINTER_GRID_LAYOUT
   )
 }
 

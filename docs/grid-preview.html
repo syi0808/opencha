@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OpenCHA 8-Cell Ring Grid Preview</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #f6f8fa;
+      color: #24292f;
+      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      padding: 32px 16px;
+    }
+
+    .comment {
+      width: min(760px, 100%);
+      margin: 0 auto;
+      background: #ffffff;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .comment-header {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      padding: 12px 16px;
+      background: #f6f8fa;
+      border-bottom: 1px solid #d0d7de;
+      color: #57606a;
+    }
+
+    .comment-header strong {
+      color: #24292f;
+    }
+
+    .comment-body {
+      padding: 20px 18px 22px;
+    }
+
+    h1 {
+      margin: 0 0 18px;
+      font-size: 24px;
+      line-height: 1.25;
+    }
+
+    .notice {
+      border-left: 4px solid #8250df;
+      padding: 10px 14px;
+      margin-bottom: 18px;
+      background: #ffffff;
+    }
+
+    .status {
+      border-collapse: collapse;
+      margin: 0 0 16px;
+      width: min(560px, 100%);
+    }
+
+    .status th,
+    .status td {
+      border: 1px solid #d0d7de;
+      padding: 8px 12px;
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    .status th:last-child,
+    .status td:last-child {
+      text-align: right;
+    }
+
+    .challenge-grid {
+      border-collapse: collapse;
+      margin: 14px 0 18px;
+    }
+
+    .challenge-grid td {
+      padding: 3px;
+      border: 0;
+      line-height: 0;
+      background: transparent;
+      text-align: center;
+      vertical-align: middle;
+    }
+
+    .challenge-grid img {
+      display: block;
+      object-fit: fill;
+      image-rendering: auto;
+    }
+
+    p {
+      margin: 12px 0;
+      max-width: 620px;
+    }
+
+    pre {
+      margin: 12px 0 0;
+      padding: 14px 16px;
+      background: #f6f8fa;
+      border-radius: 6px;
+      overflow: auto;
+    }
+
+    code {
+      font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    @media (max-width: 560px) {
+      body {
+        padding: 16px 8px;
+      }
+
+      .comment-body {
+        padding: 16px 10px;
+      }
+
+      .challenge-grid img {
+        max-width: 30vw;
+        height: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <article class="comment">
+    <header class="comment-header">
+      <strong>github-actions</strong>
+      <span>Bot commented just now</span>
+    </header>
+
+    <main class="comment-body">
+      <h1>OpenCHA verification</h1>
+
+      <div class="notice">
+        <strong>Important</strong><br>
+        This PR is waiting on a quick visual check because it was opened by an outside contributor.
+      </div>
+
+      <table class="status">
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th>Challenge</th>
+            <th>Attempts</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Waiting for answer</td>
+            <td>8-cell ring grid</td>
+            <td><strong>3 left</strong></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <table class="challenge-grid" aria-label="OpenCHA generated challenge preview">
+        <tbody>
+          <tr>
+            <td><img src="grid-preview-assets/nw.gif" alt="OpenCHA cell NW" width="230" height="230"></td>
+            <td><img src="grid-preview-assets/n.gif" alt="OpenCHA cell N" width="270" height="190"></td>
+            <td><img src="grid-preview-assets/ne.gif" alt="OpenCHA cell NE" width="230" height="230"></td>
+          </tr>
+          <tr>
+            <td><img src="grid-preview-assets/w.gif" alt="OpenCHA cell W" width="190" height="270"></td>
+            <td><img src="grid-preview-assets/center.gif" alt="OpenCHA pointer" width="230" height="230"></td>
+            <td><img src="grid-preview-assets/e.gif" alt="OpenCHA cell E" width="190" height="270"></td>
+          </tr>
+          <tr>
+            <td><img src="grid-preview-assets/sw.gif" alt="OpenCHA cell SW" width="230" height="230"></td>
+            <td><img src="grid-preview-assets/s.gif" alt="OpenCHA cell S" width="270" height="190"></td>
+            <td><img src="grid-preview-assets/se.gif" alt="OpenCHA cell SE" width="230" height="230"></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>Watch the center pointer. Record the character where the arrow briefly pauses, then reply with the captured sequence.</p>
+
+      <p>Reply with:</p>
+      <pre><code>/opencha answer YOUR_CODE</code></pre>
+    </main>
+  </article>
+</body>
+</html>

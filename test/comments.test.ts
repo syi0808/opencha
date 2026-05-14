@@ -60,8 +60,15 @@ describe('OpenCHA comments', () => {
     })
 
     expect(body).toContain('| Status | Challenge | Attempts |')
-    expect(body).toContain('Watch arrow pauses')
-    expect(body).toContain('arrow briefly pauses')
+    expect(body).toContain('8-cell ring grid')
+    expect(body).toContain('center pointer')
+    expect(body).toContain('Record the character')
+    expect(body).toContain('<table cellspacing="0" cellpadding="0">')
+    expect(body).toContain('OpenCHA pointer')
+    expect(body).toContain('OpenCHA pointer" width="230" height="230"')
+    expect(body).toContain('OpenCHA cell NW')
+    expect(body).toContain('OpenCHA cell W" width="190" height="270"')
+    expect(body).toContain('OpenCHA cell N" width="270" height="190"')
     expect(body).toContain('/opencha answer YOUR_CODE')
     expect(body).not.toContain('1st code')
     expect(body).not.toContain('2nd code')
@@ -69,6 +76,37 @@ describe('OpenCHA comments', () => {
     expect(body).not.toContain('ABCDE')
     expect(body).not.toContain(payload.answerHash)
     expect(extractEncryptedPayload(body)).toBe('encrypted')
+  })
+
+  it('keeps old temporal pointer payloads on the single-image fallback path', () => {
+    const payload: ChallengePayload = {
+      ...sampleTemporalPayload(),
+      challengeParams: {
+        kind: 'temporal-pointer',
+        codeLength: 5,
+        ringSize: 18,
+        captureCount: 5,
+        decoyPauseCount: 0,
+        frameDelayMs: 90,
+        charset: 'ABCDEFGHJKLMNPQRTUVWXY346789',
+        noiseLevel: 'medium'
+      },
+      asset: {
+        url: 'https://raw.githubusercontent.com/o/r/opencha-assets/pr-1/challenge-abc.gif',
+        assetRef: '{"backend":"branch","branch":"opencha-assets","path":"pr-1/challenge-abc.gif"}'
+      }
+    }
+    const body = renderChallengeComment({
+      assetUrl: 'https://raw.githubusercontent.com/o/r/opencha-assets/pr-1/challenge-abc.gif',
+      payload,
+      encryptedPayload: 'encrypted',
+      now: new Date('2026-01-01T00:00:00.000Z')
+    })
+
+    expect(parseChallengePayload(payload).challengeParams).toMatchObject({ ringSize: 18 })
+    expect(body).toContain('Watch arrow pauses')
+    expect(body).toContain('![OpenCHA challenge]')
+    expect(body).not.toContain('<table>')
   })
 
   it('parses matching legacy and temporal payload versions only', () => {
@@ -163,8 +201,10 @@ function sampleTemporalPayload(): ChallengePayload {
     seed: 'seed',
     challengeParams: {
       kind: 'temporal-pointer',
+      layout: 'direction-grid',
       codeLength: 5,
-      ringSize: 18,
+      cellCodeLengths: [3, 2, 3, 2, 3, 2, 3, 2],
+      ringSize: 20,
       captureCount: 5,
       decoyPauseCount: 0,
       frameDelayMs: 90,
@@ -185,7 +225,21 @@ function sampleTemporalPayload(): ChallengePayload {
     draftedByOpencha: true,
     asset: {
       url: 'https://raw.githubusercontent.com/o/r/opencha-assets/pr-1/challenge-abc.gif',
-      assetRef: '{"backend":"branch","branch":"opencha-assets","path":"pr-1/challenge-abc.gif"}'
+      assetRef: '{"backend":"branch","branch":"opencha-assets","path":"pr-1/challenge-abc.gif"}',
+      layout: {
+        kind: 'direction-grid',
+        center: 'https://raw.githubusercontent.com/o/r/opencha-assets/pr-1/challenge-center.gif',
+        cells: [
+          { direction: 'N', url: 'https://raw.githubusercontent.com/o/r/opencha-assets/pr-1/challenge-n.gif' },
+          { direction: 'NE', url: 'https://raw.githubusercontent.com/o/r/opencha-assets/pr-1/challenge-ne.gif' },
+          { direction: 'E', url: 'https://raw.githubusercontent.com/o/r/opencha-assets/pr-1/challenge-e.gif' },
+          { direction: 'SE', url: 'https://raw.githubusercontent.com/o/r/opencha-assets/pr-1/challenge-se.gif' },
+          { direction: 'S', url: 'https://raw.githubusercontent.com/o/r/opencha-assets/pr-1/challenge-s.gif' },
+          { direction: 'SW', url: 'https://raw.githubusercontent.com/o/r/opencha-assets/pr-1/challenge-sw.gif' },
+          { direction: 'W', url: 'https://raw.githubusercontent.com/o/r/opencha-assets/pr-1/challenge-w.gif' },
+          { direction: 'NW', url: 'https://raw.githubusercontent.com/o/r/opencha-assets/pr-1/challenge-nw.gif' }
+        ]
+      }
     },
     exceeded: false
   }

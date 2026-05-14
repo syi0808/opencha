@@ -20,7 +20,7 @@ A verifying PR starts with a visual challenge. If the author runs out of attempt
   <tr>
     <td width="50%" valign="top">
       <strong>Challenge</strong><br>
-      <img src="docs/challenge.png" alt="OpenCHA challenge comment waiting for an answer" width="100%">
+      OpenCHA renders a 3x3 grid challenge with a larger center pointer GIF and eight surrounding noisy code GIFs.
     </td>
     <td width="50%" valign="top">
       <strong>Needs maintainer</strong><br>
@@ -93,13 +93,13 @@ policy:
   reverify_on_push: false
 ```
 
-`challenge.code_count` is accepted for compatibility with existing configuration. The default temporal challenge chooses a 5- or 6-symbol captured sequence.
+`challenge.code_count` is accepted for compatibility with existing configuration. The default temporal challenge chooses a 5- or 6-pause captured sequence.
 
 ## Challenge Flow
 
-The MVP challenge is a square rasterized GIF. It renders ASCII-art symbols around a wheel while a center pointer rotates and briefly pauses on captured symbols. The PR author watches the pauses and replies with the captured symbols in order.
+The MVP challenge renders a 3x3 visual grid in the GitHub comment. The center cell is an animated pointer GIF, and the eight surrounding cells are independent noisy code GIFs with non-uniform displayed sizes. Each surrounding GIF contains short ASCII-art characters. Pointer target anchors are positioned on a shared visual ring around the center, while the readable characters are laid out separately and connected to their anchors with subtle guide lines. A left-side three-character cell, for example, keeps the three readable characters vertically separated while preserving distinct pointer targets. The PR author watches the center pointer, records the character where the arrow briefly pauses, and replies with the captured characters in order.
 
-No single frame is intended to show the complete answer. Solving requires observing the animation timeline and combining multiple capture events. OpenCHA still bundles Noto Sans Bold, Noto Serif Bold, Anton, and Oswald Bold TTF files for local font rasterization, and the renderer converts glyph outlines into ASCII density cells before drawing the GIF.
+No single frame is intended to show the complete answer. Solving requires observing the center animation timeline and combining it with the rendered GitHub comment layout. The surrounding code GIFs do not need to stay synchronized with the center pointer; each surrounding cell keeps the same code meaning throughout its short noisy loop. OpenCHA still bundles Noto Sans Bold, Noto Serif Bold, Anton, and Oswald Bold TTF files for local font rasterization, and the renderer converts glyph outlines into ASCII density cells before drawing the GIFs.
 
 Untrusted PR authors reply to the challenge with:
 

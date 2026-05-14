@@ -11,10 +11,16 @@ import {
 import { SeededRandom } from './random'
 import { temporalPointerSymbolAngleDegrees } from './temporal-pointer'
 import {
+  temporalPointerGridCharacterAnchorRatio,
+  temporalPointerGridReadableCharacterRatio
+} from './temporal-grid-layout'
+import {
   TEMPORAL_POINTER_CHALLENGE_VERSION,
+  TEMPORAL_POINTER_GRID_SLOTS,
   type ChallengeDisplayModel,
   type LegacySlideDisplayModel,
   type TemporalPointerDisplayModel,
+  type TemporalPointerGridSlot,
   type TemporalPointerFrameCue
 } from './types'
 
@@ -25,10 +31,19 @@ export interface Frame {
   delayMs: number
 }
 
+export type ChallengeRenderAssetSlot = 'challenge' | 'center' | TemporalPointerGridSlot
+
+export interface ChallengeRenderAsset {
+  slot: ChallengeRenderAssetSlot
+  filenamePart: string
+  frames: Frame[]
+}
+
 export const FRAME_WIDTH = 528
 export const FRAME_HEIGHT = 528
 export const FRAME_DELAY_MS = 90
 export const CODE_HOLD_FRAMES = 5
+export const TEMPORAL_DIRECTION_CELL_LOOP_FRAMES = 12
 
 const BACKGROUND = [240, 239, 234, 255] as const
 const TEXT = ASCII_ART_CHARACTER_COLORS[0] as RgbaColor
@@ -42,16 +57,23 @@ const TEMPORAL_WHEEL_SYMBOL_COLORS = ASCII_ART_CHARACTER_COLORS.filter(
 
 const POINTER_CENTER_X = Math.round(FRAME_WIDTH / 2)
 const POINTER_CENTER_Y = Math.round(FRAME_HEIGHT / 2)
-const WHEEL_RADIUS_X = 206
-const WHEEL_RADIUS_Y = 206
+const WHEEL_RADIUS_X = 232
+const WHEEL_RADIUS_Y = 232
 const WHEEL_LABEL_FONT_SIZE_VARIANTS = [16, 17, 18] as const
 const WHEEL_LABEL_TRACKING = -2
 const WHEEL_SYMBOL_JITTER_X_PX = [-3, -2, -1, 0, 1, 2, 3] as const
 const WHEEL_SYMBOL_JITTER_Y_PX = [-1, 0, 1] as const
 const WHEEL_SYMBOL_ROTATION_DEGREES = [-7, -5, -3, 0, 3, 5, 7] as const
 const WHEEL_SYMBOL_SCALE_Y = [0.8, 0.84, 0.88] as const
-const POINTER_INSET = 34
-const POINTER_ARROWHEAD_LENGTH = 14
+const GRID_LABEL_FONT_SIZE_VARIANTS = [22, 24, 26] as const
+const GRID_SYMBOL_JITTER_X_PX = [-4, -2, 0, 2, 4] as const
+const GRID_SYMBOL_JITTER_Y_PX = [-3, -1, 0, 1, 3] as const
+const GRID_SYMBOL_ROTATION_DEGREES = [-5, -3, 0, 3, 5] as const
+const GRID_SYMBOL_SCALE_Y = [0.88, 0.92, 0.96, 1] as const
+const TEMPORAL_GRID_ANCHOR_RADIUS = 3
+const TEMPORAL_GRID_READABLE_MARGIN = 12
+const POINTER_INSET = 18
+const POINTER_ARROWHEAD_LENGTH = 16
 const TEMPORAL_TIMELINE_BORDER_INSET = 10
 const TEMPORAL_TIMELINE_BORDER_THICKNESS = 3
 
@@ -114,6 +136,21 @@ export function renderChallengeFrames(challenge: ChallengeDisplayModel): Frame[]
   return renderLegacySlideChallengeFrames(challenge)
 }
 
+export function renderChallengeAssets(challenge: ChallengeDisplayModel): ChallengeRenderAsset[] {
+  if (challenge.version !== TEMPORAL_POINTER_CHALLENGE_VERSION) {
+    return [{ slot: 'challenge', filenamePart: 'challenge', frames: renderLegacySlideChallengeFrames(challenge) }]
+  }
+
+  return [
+    { slot: 'center', filenamePart: 'center', frames: renderTemporalPointerFrames(challenge) },
+    ...TEMPORAL_POINTER_GRID_SLOTS.map((slot, symbolIndex) => ({
+      slot,
+      filenamePart: slot.toLowerCase(),
+      frames: renderTemporalDirectionCellFrames(challenge, symbolIndex)
+    }))
+  ]
+}
+
 function renderLegacySlideChallengeFrames(challenge: LegacySlideDisplayModel): Frame[] {
   const frames: Frame[] = []
   const codeArt = challenge.codes.map((code, codeIndex) =>
@@ -143,30 +180,96 @@ function renderLegacySlideChallengeFrames(challenge: LegacySlideDisplayModel): F
 }
 
 function renderTemporalPointerFrames(challenge: TemporalPointerDisplayModel): Frame[] {
-  const symbolStyles = challenge.wheelSymbols.map((_symbol, symbolIndex) =>
-    temporalWheelSymbolStyle(challenge.seed, symbolIndex)
-  )
-  const symbolArt = challenge.wheelSymbols.map((symbol, symbolIndex) =>
-    renderAsciiCodeArt(symbol, symbolStyles[symbolIndex]!.font)
-  )
-
-  return challenge.timeline.map((cue) => renderTemporalPointerFrame(challenge, symbolArt, symbolStyles, cue))
+  return challenge.timeline.map((cue) => renderTemporalPointerFrame(challenge, cue))
 }
 
 function renderTemporalPointerFrame(
   challenge: TemporalPointerDisplayModel,
-  symbolArt: readonly AsciiCodeArt[],
-  symbolStyles: readonly TemporalWheelSymbolStyle[],
   cue: TemporalPointerFrameCue
 ): Frame {
   const rgba = new Uint8Array(FRAME_WIDTH * FRAME_HEIGHT * 4)
   const random = new SeededRandom(`${challenge.seed}:temporal-frame:${cue.frameIndex}`)
   prepareCanvas(rgba, random)
 
-  drawTemporalWheel(rgba, challenge, symbolArt, symbolStyles, cue.frameIndex)
   drawTemporalPointer(rgba, cue.pointerAngleDegrees)
   drawTemporalHub(rgba)
   drawTemporalTimelineBorder(rgba, cue.frameIndex, challenge.timeline.length)
+
+  return {
+    width: FRAME_WIDTH,
+    height: FRAME_HEIGHT,
+    rgba,
+    delayMs: challenge.params.frameDelayMs
+  }
+}
+
+function renderTemporalDirectionCellFrames(
+  challenge: TemporalPointerDisplayModel,
+  symbolIndex: number
+): Frame[] {
+  const symbol = challenge.wheelSymbols[symbolIndex]
+  if (!symbol) return []
+
+  const characters = [...symbol].map((character, characterIndex) => {
+    const style = temporalGridSymbolStyle(challenge.seed, symbolIndex, characterIndex)
+    return {
+      art: renderAsciiCodeArt(character, style.font, {
+        seed: challenge.seed,
+        codeIndex: symbolIndex * 8 + characterIndex
+      }),
+      characterIndex,
+      characterCount: symbol.length,
+      style
+    }
+  })
+
+  return Array.from({ length: TEMPORAL_DIRECTION_CELL_LOOP_FRAMES }, (_unused, frameIndex) =>
+    renderTemporalDirectionCellFrame(challenge, characters, symbolIndex, frameIndex)
+  )
+}
+
+interface TemporalGridCharacterRender {
+  art: AsciiCodeArt
+  characterIndex: number
+  characterCount: number
+  style: TemporalWheelSymbolStyle
+}
+
+function renderTemporalDirectionCellFrame(
+  challenge: TemporalPointerDisplayModel,
+  characters: readonly TemporalGridCharacterRender[],
+  symbolIndex: number,
+  frameIndex: number
+): Frame {
+  const rgba = new Uint8Array(FRAME_WIDTH * FRAME_HEIGHT * 4)
+  const random = new SeededRandom(`${challenge.seed}:temporal-cell:${symbolIndex}:${frameIndex}`)
+  prepareCanvas(rgba, random)
+
+  for (const character of characters) {
+    const interferenceIndex = symbolIndex * 8 + character.characterIndex
+    const frameArt = temporalSymbolArtForFrame(character.art, challenge, interferenceIndex, frameIndex)
+    const target = temporalGridCharacterTargetPoint(
+      symbolIndex,
+      character.characterIndex,
+      character.characterCount
+    )
+    const base = temporalGridReadableCharacterPosition(
+      frameArt,
+      symbolIndex,
+      character.characterIndex,
+      character.characterCount
+    )
+    const readableCenter = {
+      x: Math.round(base.x + character.style.offsetX + frameArt.widthPx / 2),
+      y: Math.round(base.y + character.style.offsetY + frameArt.heightPx / 2)
+    }
+
+    drawLine(rgba, target.x, target.y, readableCenter.x, readableCenter.y, DUST)
+    drawTemporalTargetAnchor(rgba, target.x, target.y)
+    drawAsciiArtRowsTransformed(rgba, frameArt, base.x, base.y, TEXT, character.style)
+  }
+
+  drawObstruction(rgba, random)
 
   return {
     width: FRAME_WIDTH,
@@ -266,7 +369,7 @@ interface TemporalWheelSymbolStyle {
   offsetY: number
   rotationDegrees: number
   scaleY: number
-  color: RgbaColor
+  color?: RgbaColor
 }
 
 function temporalWheelSymbolStyle(seed: string, symbolIndex: number): TemporalWheelSymbolStyle {
@@ -288,6 +391,27 @@ function temporalWheelSymbolStyle(seed: string, symbolIndex: number): TemporalWh
     ] as number,
     scaleY: WHEEL_SYMBOL_SCALE_Y[random.nextInt(WHEEL_SYMBOL_SCALE_Y.length)] as number,
     color: selectTemporalWheelColor(random)
+  }
+}
+
+function temporalGridSymbolStyle(seed: string, symbolIndex: number, characterIndex: number): TemporalWheelSymbolStyle {
+  const random = new SeededRandom(`${seed}:temporal-grid-symbol-style:${symbolIndex}:${characterIndex}`)
+  const selected = selectAsciiArtFont(seed, symbolIndex * 8 + characterIndex)
+  const fontSize = GRID_LABEL_FONT_SIZE_VARIANTS[random.nextInt(GRID_LABEL_FONT_SIZE_VARIANTS.length)] as number
+
+  return {
+    font: {
+      ...selected,
+      name: `${selected.name}-grid`,
+      fontSize,
+      tracking: selected.tracking
+    },
+    offsetX: GRID_SYMBOL_JITTER_X_PX[random.nextInt(GRID_SYMBOL_JITTER_X_PX.length)] as number,
+    offsetY: GRID_SYMBOL_JITTER_Y_PX[random.nextInt(GRID_SYMBOL_JITTER_Y_PX.length)] as number,
+    rotationDegrees: GRID_SYMBOL_ROTATION_DEGREES[
+      random.nextInt(GRID_SYMBOL_ROTATION_DEGREES.length)
+    ] as number,
+    scaleY: GRID_SYMBOL_SCALE_Y[random.nextInt(GRID_SYMBOL_SCALE_Y.length)] as number
   }
 }
 
@@ -541,6 +665,14 @@ function drawTemporalTimelineBorder(rgba: Uint8Array, frameIndex: number, frameC
   }
 }
 
+function drawTemporalTargetAnchor(rgba: Uint8Array, centerX: number, centerY: number): void {
+  fillCircle(rgba, centerX, centerY, TEMPORAL_GRID_ANCHOR_RADIUS, DUST)
+  drawLine(rgba, centerX - 5, centerY, centerX - 2, centerY, MUTED)
+  drawLine(rgba, centerX + 2, centerY, centerX + 5, centerY, MUTED)
+  drawLine(rgba, centerX, centerY - 5, centerX, centerY - 2, MUTED)
+  drawLine(rgba, centerX, centerY + 2, centerX, centerY + 5, MUTED)
+}
+
 function wheelSymbolPosition(
   symbolIndex: number,
   symbolCount: number,
@@ -726,6 +858,40 @@ function centerPosition(art: AsciiCodeArt): { x: number; y: number } {
   }
 }
 
+function temporalGridCharacterTargetPoint(
+  symbolIndex: number,
+  characterIndex: number,
+  characterCount: number
+): { x: number; y: number } {
+  const slot = TEMPORAL_POINTER_GRID_SLOTS[symbolIndex]
+  if (!slot) return { x: POINTER_CENTER_X, y: POINTER_CENTER_Y }
+
+  const anchor = temporalPointerGridCharacterAnchorRatio(slot, characterIndex, characterCount)
+  return {
+    x: Math.round(anchor.x * FRAME_WIDTH),
+    y: Math.round(anchor.y * FRAME_HEIGHT)
+  }
+}
+
+function temporalGridReadableCharacterPosition(
+  art: AsciiCodeArt,
+  symbolIndex: number,
+  characterIndex: number,
+  characterCount: number
+): { x: number; y: number } {
+  const slot = TEMPORAL_POINTER_GRID_SLOTS[symbolIndex]
+  if (!slot) return centerPosition(art)
+
+  const anchor = temporalPointerGridReadableCharacterRatio(slot, characterIndex, characterCount)
+  const x = Math.round(anchor.x * FRAME_WIDTH - art.widthPx / 2)
+  const y = Math.round(anchor.y * FRAME_HEIGHT - art.heightPx / 2)
+
+  return {
+    x: clamp(x, TEMPORAL_GRID_READABLE_MARGIN, FRAME_WIDTH - art.widthPx - TEMPORAL_GRID_READABLE_MARGIN),
+    y: clamp(y, TEMPORAL_GRID_READABLE_MARGIN, FRAME_HEIGHT - art.heightPx - TEMPORAL_GRID_READABLE_MARGIN)
+  }
+}
+
 function slideDirection(seed: string, transitionIndex: number): SlideDirection {
   const random = new SeededRandom(`${seed}:slide-direction:${transitionIndex}`)
   const directions = [
@@ -743,6 +909,10 @@ function easeInOut(value: number): number {
 
 function degreesToRadians(value: number): number {
   return (value * Math.PI) / 180
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), Math.max(min, max))
 }
 
 function fillCircle(

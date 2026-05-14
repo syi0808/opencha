@@ -10,11 +10,19 @@ import {
 } from '../../src/challenge/ascii-art-fonts'
 import { createChallenge, createLegacySlideChallenge } from '../../src/challenge/generate'
 import {
+  TEMPORAL_POINTER_GRID_TABLE_ROWS,
+  temporalPointerGridCharacterAnchorRatio,
+  temporalPointerGridReadableCharacterRatio,
+  temporalPointerGridDisplaySize
+} from '../../src/challenge/temporal-grid-layout'
+import {
   CODE_HOLD_FRAMES,
   FRAME_HEIGHT,
   FRAME_WIDTH,
+  TEMPORAL_DIRECTION_CELL_LOOP_FRAMES,
   TEMPORAL_SYMBOL_MIN_VISIBLE_RATIO,
   hasTinyAsciiGlyph,
+  renderChallengeAssets,
   renderChallengeFrames,
   temporalSymbolArtForFrame
 } from '../../src/challenge/render'
@@ -219,23 +227,112 @@ describe('challenge renderer', () => {
     }
   })
 
-  it('renders temporal pointer frames from the generated timeline', () => {
+  it('renders temporal pointer grid assets from the generated timeline', () => {
     const challenge = createChallenge({ seed: 'temporal-render-seed', answerSalt: 'salt' }).display
     if (challenge.version !== TEMPORAL_POINTER_CHALLENGE_VERSION) {
       throw new Error('expected temporal pointer display')
     }
 
-    const frames = renderChallengeFrames(challenge)
-    expect(frames).toHaveLength(challenge.timeline.length)
+    const assets = renderChallengeAssets(challenge)
+    expect(assets).toHaveLength(9)
+    expect(assets.map((asset) => asset.slot)).toEqual(['center', 'N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'])
     expect(FRAME_WIDTH).toBe(FRAME_HEIGHT)
 
-    for (const frame of frames) {
-      expect(frame.width).toBe(FRAME_WIDTH)
-      expect(frame.height).toBe(FRAME_HEIGHT)
-      expect(frame.rgba).toHaveLength(FRAME_WIDTH * FRAME_HEIGHT * 4)
-      expect(frame.delayMs).toBe(challenge.params.frameDelayMs)
+    for (const asset of assets) {
+      expect(asset.frames).toHaveLength(
+        asset.slot === 'center' ? challenge.timeline.length : TEMPORAL_DIRECTION_CELL_LOOP_FRAMES
+      )
+      for (const frame of asset.frames) {
+        expect(frame.width).toBe(FRAME_WIDTH)
+        expect(frame.height).toBe(FRAME_HEIGHT)
+        expect(frame.rgba).toHaveLength(FRAME_WIDTH * FRAME_HEIGHT * 4)
+        expect(frame.delayMs).toBe(challenge.params.frameDelayMs)
+      }
     }
   }, 10000)
+
+  it('places temporal grid GIFs with non-uniform sizes and character-level ring anchors', () => {
+    expect(temporalPointerGridDisplaySize('center')).toEqual({ width: 230, height: 230 })
+    expect(temporalPointerGridDisplaySize('W')).toEqual({ width: 190, height: 270 })
+    expect(temporalPointerGridDisplaySize('N')).toEqual({ width: 270, height: 190 })
+    expect(temporalPointerGridDisplaySize('NE')).toEqual({ width: 230, height: 230 })
+
+    const renderedSlots = TEMPORAL_POINTER_GRID_TABLE_ROWS.flat()
+    const sizeKeys = new Set(renderedSlots.map((slot) => {
+      const size = temporalPointerGridDisplaySize(slot)
+      return `${size.width}x${size.height}`
+    }))
+    expect(sizeKeys.size).toBeGreaterThan(2)
+
+    for (const slot of renderedSlots) {
+      if (slot === 'center') continue
+      const characterCount = slot.length === 1 ? 3 : 2
+      for (let characterIndex = 0; characterIndex < characterCount; characterIndex++) {
+        const anchor = temporalPointerGridCharacterAnchorRatio(slot, characterIndex, characterCount)
+        expect(anchor.x, `${slot} ${characterIndex} anchor x`).toBeGreaterThan(0.08)
+        expect(anchor.x, `${slot} ${characterIndex} anchor x`).toBeLessThan(0.92)
+        expect(anchor.y, `${slot} ${characterIndex} anchor y`).toBeGreaterThan(0.08)
+        expect(anchor.y, `${slot} ${characterIndex} anchor y`).toBeLessThan(0.92)
+      }
+    }
+
+    const westAnchors = [0, 1, 2].map((index) => temporalPointerGridCharacterAnchorRatio('W', index, 3))
+    expect(westAnchors[0]!.y).toBeLessThan(westAnchors[1]!.y)
+    expect(westAnchors[1]!.y).toBeLessThan(westAnchors[2]!.y)
+    expect(Math.max(...westAnchors.map((anchor) => anchor.x)) - Math.min(...westAnchors.map((anchor) => anchor.x)))
+      .toBeLessThan(0.18)
+
+    const northAnchors = [0, 1, 2].map((index) => temporalPointerGridCharacterAnchorRatio('N', index, 3))
+    expect(northAnchors[0]!.x).toBeLessThan(northAnchors[1]!.x)
+    expect(northAnchors[1]!.x).toBeLessThan(northAnchors[2]!.x)
+
+    const diagonalDirections = [
+      ['NE', 1, 1],
+      ['SE', -1, 1],
+      ['SW', -1, -1],
+      ['NW', 1, -1]
+    ] as const
+
+    for (const [slot, xDirection, yDirection] of diagonalDirections) {
+      const anchors = [0, 1].map((index) => temporalPointerGridCharacterAnchorRatio(slot, index, 2))
+      const readable = [0, 1].map((index) => temporalPointerGridReadableCharacterRatio(slot, index, 2))
+      const anchorDeltaX = anchors[1]!.x - anchors[0]!.x
+      const anchorDeltaY = anchors[1]!.y - anchors[0]!.y
+      const readableDeltaX = readable[1]!.x - readable[0]!.x
+      const readableDeltaY = readable[1]!.y - readable[0]!.y
+
+      expect(Math.sign(anchorDeltaX), `${slot} anchor x direction`).toBe(xDirection)
+      expect(Math.sign(anchorDeltaY), `${slot} anchor y direction`).toBe(yDirection)
+      expect(Math.sign(readableDeltaX), `${slot} readable x direction`).toBe(xDirection)
+      expect(Math.sign(readableDeltaY), `${slot} readable y direction`).toBe(yDirection)
+      expect(Math.abs(readableDeltaX), `${slot} readable x separation`).toBeGreaterThan(0.45)
+      expect(Math.abs(readableDeltaY), `${slot} readable y separation`).toBeGreaterThan(0.45)
+    }
+  })
+
+  it('draws every character in each temporal grid frame at readable separated positions', () => {
+    const challenge = createChallenge({ seed: 'temporal-all-characters-seed', answerSalt: 'salt' }).display
+    if (challenge.version !== TEMPORAL_POINTER_CHALLENGE_VERSION) {
+      throw new Error('expected temporal pointer display')
+    }
+
+    const frame = renderChallengeAssets(challenge).find((asset) => asset.slot === 'W')?.frames[0]
+    if (!frame) throw new Error('expected W cell frame')
+
+    const textColorKeys = new Set(ASCII_ART_CHARACTER_COLORS.map(colorKey))
+    const readableAnchors = [0, 1, 2].map((index) => temporalPointerGridReadableCharacterRatio('W', index, 3))
+
+    for (const [index, anchor] of readableAnchors.entries()) {
+      const centerX = Math.round(anchor.x * FRAME_WIDTH)
+      const centerY = Math.round(anchor.y * FRAME_HEIGHT)
+      const visiblePixels = countPalettePixelsInRect(frame.rgba, textColorKeys, centerX - 70, centerY - 78, centerX + 70, centerY + 78)
+
+      expect(visiblePixels, `visible readable character ${index}`).toBeGreaterThan(40)
+    }
+
+    expect(readableAnchors[1]!.y - readableAnchors[0]!.y).toBeGreaterThan(0.35)
+    expect(readableAnchors[2]!.y - readableAnchors[1]!.y).toBeGreaterThan(0.35)
+  })
 
   it('applies deterministic frame-varying ASCII stroke interference to temporal symbols', () => {
     const challenge = createChallenge({ seed: 'temporal-interference-seed', answerSalt: 'salt' }).display
@@ -275,23 +372,28 @@ describe('challenge renderer', () => {
     expect(symbolsWithAddedStrokes).toBeGreaterThan(0)
   })
 
-  it('draws temporal wheel symbols with varied colors and a shrinking timeline border', () => {
+  it('draws temporal grid symbols without cell borders and keeps the shrinking center timeline border', () => {
     const challenge = createChallenge({ seed: 'temporal-style-seed', answerSalt: 'salt' }).display
     if (challenge.version !== TEMPORAL_POINTER_CHALLENGE_VERSION) {
       throw new Error('expected temporal pointer display')
     }
 
-    const frames = renderChallengeFrames(challenge)
-    const firstFrame = frames[0]
-    const finalFrame = frames[frames.length - 1]
+    const assets = renderChallengeAssets(challenge)
+    const centerFrames = assets.find((asset) => asset.slot === 'center')?.frames ?? []
+    const firstFrame = centerFrames[0]
+    const finalFrame = centerFrames[centerFrames.length - 1]
     if (!firstFrame || !finalFrame) throw new Error('expected temporal frames')
 
     const textColorKeys = new Set(ASCII_ART_CHARACTER_COLORS.map(colorKey))
     const seenTextColors = new Set<string>()
 
-    for (let index = 0; index < firstFrame.rgba.length; index += 4) {
-      const key = `${firstFrame.rgba[index]},${firstFrame.rgba[index + 1]},${firstFrame.rgba[index + 2]},${firstFrame.rgba[index + 3]}`
-      if (textColorKeys.has(key)) seenTextColors.add(key)
+    for (const asset of assets.filter((asset) => asset.slot !== 'center')) {
+      const frame = asset.frames[0]
+      if (!frame) continue
+      for (let index = 0; index < frame.rgba.length; index += 4) {
+        const key = `${frame.rgba[index]},${frame.rgba[index + 1]},${frame.rgba[index + 2]},${frame.rgba[index + 3]}`
+        if (textColorKeys.has(key)) seenTextColors.add(key)
+      }
     }
 
     expect(seenTextColors.size).toBeGreaterThan(1)
@@ -300,6 +402,11 @@ describe('challenge renderer', () => {
         4.5
       )
     }
+
+    const firstCellFrame = assets.find((asset) => asset.slot === 'W')?.frames[0]
+    if (!firstCellFrame) throw new Error('expected temporal cell frame')
+    expect(countTimelineBorderPixels(firstCellFrame.rgba, [41, 44, 48, 255])).toBeLessThan(120)
+
     const firstBorderPixels = countTimelineBorderPixels(firstFrame.rgba, [41, 44, 48, 255])
     const finalBorderPixels = countTimelineBorderPixels(finalFrame.rgba, [41, 44, 48, 255])
     expect(firstBorderPixels).toBeGreaterThan(finalBorderPixels + 1200)
@@ -408,6 +515,31 @@ function countColorPixelsInRect(
       ) {
         count += 1
       }
+    }
+  }
+
+  return count
+}
+
+function countPalettePixelsInRect(
+  rgba: Uint8Array,
+  colors: ReadonlySet<string>,
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number
+): number {
+  let count = 0
+  const left = Math.max(0, minX)
+  const top = Math.max(0, minY)
+  const right = Math.min(FRAME_WIDTH - 1, maxX)
+  const bottom = Math.min(FRAME_HEIGHT - 1, maxY)
+
+  for (let y = top; y <= bottom; y++) {
+    for (let x = left; x <= right; x++) {
+      const offset = (y * FRAME_WIDTH + x) * 4
+      const key = `${rgba[offset]},${rgba[offset + 1]},${rgba[offset + 2]},${rgba[offset + 3]}`
+      if (colors.has(key)) count += 1
     }
   }
 

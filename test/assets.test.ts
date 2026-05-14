@@ -17,7 +17,7 @@ describe('branch asset store', () => {
       repo: 'repo',
       prNumber: 123,
       challengeId: 'abc-123',
-      filename: 'ignored.gif',
+      filename: 'challenge-abc123.gif',
       contentType: 'image/gif',
       bytes: new Uint8Array([1, 2, 3])
     })
@@ -28,6 +28,22 @@ describe('branch asset store', () => {
       backend: 'branch',
       branch: 'opencha-assets',
       path: 'pr-123/challenge-abc123.gif'
+    })
+  })
+
+  it('parses bundled branch asset refs for multi-image challenge cleanup', () => {
+    expect(parseAssetRef(JSON.stringify({
+      backend: 'branch-bundle',
+      refs: [
+        { backend: 'branch', branch: 'opencha-assets', path: 'pr-123/challenge-center.gif' },
+        { backend: 'branch', branch: 'opencha-assets', path: 'pr-123/challenge-n.gif' }
+      ]
+    }))).toEqual({
+      backend: 'branch-bundle',
+      refs: [
+        { backend: 'branch', branch: 'opencha-assets', path: 'pr-123/challenge-center.gif' },
+        { backend: 'branch', branch: 'opencha-assets', path: 'pr-123/challenge-n.gif' }
+      ]
     })
   })
 })

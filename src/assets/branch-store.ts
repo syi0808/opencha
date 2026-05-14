@@ -7,6 +7,13 @@ export interface BranchAssetRef {
   path: string
 }
 
+export interface BranchAssetBundleRef {
+  backend: 'branch-bundle'
+  refs: BranchAssetRef[]
+}
+
+export type BranchAssetReference = BranchAssetRef | BranchAssetBundleRef
+
 export class GitBranchAssetStore implements ChallengeAssetStore {
   constructor(
     private readonly gateway: GitHubGateway,
@@ -24,7 +31,7 @@ export class GitBranchAssetStore implements ChallengeAssetStore {
     bytes: Uint8Array
   }): Promise<{ url: string; assetRef: string }> {
     await this.gateway.ensureBranch(input.owner, input.repo, this.branch, this.baseRef)
-    const path = `pr-${input.prNumber}/challenge-${shortId(input.challengeId)}.gif`
+    const path = `pr-${input.prNumber}/${safeFilename(input.filename, input.challengeId)}`
     await this.gateway.writeFile(
       input.owner,
       input.repo,
@@ -47,15 +54,27 @@ export class GitBranchAssetStore implements ChallengeAssetStore {
   async delete(input: { owner: string; repo: string; assetRef: string }): Promise<void> {
     const ref = parseAssetRef(input.assetRef)
     if (!ref) return
-    await this.gateway.deleteFile(input.owner, input.repo, ref.branch, ref.path, 'Remove OpenCHA challenge asset')
+    const refs = ref.backend === 'branch-bundle' ? ref.refs : [ref]
+    for (const asset of refs) {
+      await this.gateway.deleteFile(input.owner, input.repo, asset.branch, asset.path, 'Remove OpenCHA challenge asset')
+    }
   }
 }
 
-export function parseAssetRef(value: string): BranchAssetRef | null {
+export function parseAssetRef(value: string): BranchAssetReference | null {
   try {
-    const parsed = JSON.parse(value) as Partial<BranchAssetRef>
+    const parsed = JSON.parse(value) as Partial<BranchAssetReference>
     if (parsed.backend === 'branch' && typeof parsed.branch === 'string' && typeof parsed.path === 'string') {
       return { backend: 'branch', branch: parsed.branch, path: parsed.path }
+    }
+    if (parsed.backend === 'branch-bundle' && Array.isArray(parsed.refs)) {
+      const refs = parsed.refs.flatMap((ref) => {
+        if (ref.backend === 'branch' && typeof ref.branch === 'string' && typeof ref.path === 'string') {
+          return [{ backend: 'branch' as const, branch: ref.branch, path: ref.path }]
+        }
+        return []
+      })
+      if (refs.length === parsed.refs.length) return { backend: 'branch-bundle', refs }
     }
   } catch {
     return null
@@ -63,6 +82,21 @@ export function parseAssetRef(value: string): BranchAssetRef | null {
   return null
 }
 
+export function bundleAssetRefs(assetRefs: readonly string[]): string {
+  const refs = assetRefs.flatMap((assetRef) => {
+    const parsed = parseAssetRef(assetRef)
+    if (!parsed) return []
+    return parsed.backend === 'branch-bundle' ? parsed.refs : [parsed]
+  })
+
+  return JSON.stringify({ backend: 'branch-bundle', refs } satisfies BranchAssetBundleRef)
+}
+
 function shortId(challengeId: string): string {
   return challengeId.replace(/[^A-Za-z0-9]/g, '').slice(0, 12) || 'challenge'
+}
+
+function safeFilename(filename: string, challengeId: string): string {
+  const normalized = filename.replace(/[^A-Za-z0-9._-]/g, '-').replace(/^-+|-+$/g, '')
+  return normalized || `challenge-${shortId(challengeId)}.gif`
 }

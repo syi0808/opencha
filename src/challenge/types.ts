@@ -2,6 +2,12 @@ export const LEGACY_SLIDE_CHALLENGE_VERSION = 1
 export const TEMPORAL_POINTER_CHALLENGE_VERSION = 2
 export const CHALLENGE_VERSION = TEMPORAL_POINTER_CHALLENGE_VERSION
 export const TEMPORAL_POINTER_KIND = 'temporal-pointer'
+export const TEMPORAL_POINTER_GRID_LAYOUT = 'direction-grid'
+export const TEMPORAL_POINTER_GRID_SLOTS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'] as const
+export const TEMPORAL_POINTER_DIRECTIONS = TEMPORAL_POINTER_GRID_SLOTS
+export const TEMPORAL_POINTER_GRID_CENTER_IMAGE_SIZE = 230
+export const TEMPORAL_GRID_CELL_CODE_LENGTH_MIN = 2
+export const TEMPORAL_GRID_CELL_CODE_LENGTH_MAX = 3
 export const CHALLENGE_CHARSET = 'ABCDEFGHJKLMNPQRTUVWXY346789'
 export const CODE_LENGTH_MIN = 5
 export const CODE_LENGTH_MAX = 6
@@ -18,6 +24,8 @@ export type LegacySlideChallengeVersion = typeof LEGACY_SLIDE_CHALLENGE_VERSION
 export type TemporalPointerChallengeVersion = typeof TEMPORAL_POINTER_CHALLENGE_VERSION
 export type ChallengeVersion = LegacySlideChallengeVersion | TemporalPointerChallengeVersion
 export type ChallengeNoiseLevel = typeof NOISE_LEVEL
+export type TemporalPointerGridSlot = (typeof TEMPORAL_POINTER_GRID_SLOTS)[number]
+export type TemporalPointerDirection = TemporalPointerGridSlot
 
 export interface LegacySlideChallengeParams {
   codeCount?: number
@@ -32,7 +40,9 @@ export interface LegacySlideChallengeParams {
 
 export interface TemporalPointerChallengeParams {
   kind: typeof TEMPORAL_POINTER_KIND
+  layout: typeof TEMPORAL_POINTER_GRID_LAYOUT
   codeLength: number
+  cellCodeLengths?: number[]
   ringSize: number
   captureCount: number
   decoyPauseCount: number
@@ -52,6 +62,15 @@ export interface TemporalPointerFrameCue {
   completedCaptures: number
 }
 
+export interface TemporalPointerCharacterTarget {
+  targetIndex: number
+  slot: TemporalPointerGridSlot
+  slotIndex: number
+  characterIndex: number
+  character: string
+  angleDegrees: number
+}
+
 export interface LegacySlideDisplayModel {
   version: LegacySlideChallengeVersion
   seed: string
@@ -67,6 +86,10 @@ export interface TemporalPointerDisplayModel {
   seed: string
   answer: string
   wheelSymbols: string[]
+  characterTargets: TemporalPointerCharacterTarget[]
+  captureTargets: TemporalPointerCharacterTarget[]
+  captureSlots: TemporalPointerGridSlot[]
+  captureDirections: TemporalPointerDirection[]
   timeline: TemporalPointerFrameCue[]
   params: TemporalPointerChallengeParams
 }

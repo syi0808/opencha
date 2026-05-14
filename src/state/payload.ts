@@ -6,7 +6,11 @@ import {
   CODE_LENGTH_MIN,
   CHALLENGE_CHARSET,
   LEGACY_SLIDE_CHALLENGE_VERSION,
+  TEMPORAL_GRID_CELL_CODE_LENGTH_MAX,
+  TEMPORAL_GRID_CELL_CODE_LENGTH_MIN,
   TEMPORAL_POINTER_CHALLENGE_VERSION,
+  TEMPORAL_POINTER_GRID_LAYOUT,
+  TEMPORAL_POINTER_GRID_SLOTS,
   TEMPORAL_POINTER_KIND,
   TARGET_INDEX_MIN
 } from '../challenge/types'
@@ -77,27 +81,72 @@ const legacySlideParamsSchema = z.object({
 
 const temporalPointerParamsSchema = z.object({
   kind: z.literal(TEMPORAL_POINTER_KIND),
-  codeLength: z.number().int().min(CODE_LENGTH_MIN).max(CODE_LENGTH_MAX),
-  ringSize: z.number().int().min(12).max(24),
+  layout: z.literal(TEMPORAL_POINTER_GRID_LAYOUT).optional(),
+  codeLength: z.number().int().min(CODE_LENGTH_MIN).max(CODE_LENGTH_MAX * TEMPORAL_GRID_CELL_CODE_LENGTH_MAX),
+  cellCodeLengths: z
+    .array(z.number().int().min(TEMPORAL_GRID_CELL_CODE_LENGTH_MIN).max(TEMPORAL_GRID_CELL_CODE_LENGTH_MAX))
+    .length(TEMPORAL_POINTER_GRID_SLOTS.length)
+    .optional(),
+  ringSize: z.number().int().min(TEMPORAL_POINTER_GRID_SLOTS.length).max(24),
   captureCount: z.number().int().min(CODE_LENGTH_MIN).max(CODE_LENGTH_MAX),
   decoyPauseCount: z.number().int().min(0).max(3),
   frameDelayMs: z.number().int().min(60).max(140),
   charset: z.literal(CHALLENGE_CHARSET),
   noiseLevel: z.literal('medium')
 }).superRefine((params, context) => {
-  if (params.captureCount !== params.codeLength) {
+  if (params.layout === TEMPORAL_POINTER_GRID_LAYOUT && params.cellCodeLengths === undefined) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Expected direction-grid cellCodeLengths'
+    })
+  }
+
+  if (
+    params.layout === TEMPORAL_POINTER_GRID_LAYOUT &&
+    params.codeLength !== params.captureCount &&
+    (params.codeLength < params.captureCount * TEMPORAL_GRID_CELL_CODE_LENGTH_MIN ||
+      params.codeLength > params.captureCount * TEMPORAL_GRID_CELL_CODE_LENGTH_MAX)
+  ) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Expected direction-grid codeLength to match captured character count or legacy cell code length range'
+    })
+  }
+
+  if (params.layout !== TEMPORAL_POINTER_GRID_LAYOUT && params.captureCount !== params.codeLength) {
     context.addIssue({
       code: 'custom',
       message: 'Expected captureCount to match codeLength'
     })
   }
 
-  if (params.ringSize <= params.codeLength) {
+  if (params.layout !== TEMPORAL_POINTER_GRID_LAYOUT && params.ringSize <= params.codeLength) {
     context.addIssue({
       code: 'custom',
       message: 'Expected ringSize to exceed codeLength'
     })
   }
+
+  const gridTargetCount = params.cellCodeLengths?.reduce((total, length) => total + length, 0)
+  if (
+    params.layout === TEMPORAL_POINTER_GRID_LAYOUT &&
+    params.ringSize !== TEMPORAL_POINTER_GRID_SLOTS.length &&
+    params.ringSize !== gridTargetCount
+  ) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Expected direction-grid ringSize to match cell count or character target count'
+    })
+  }
+})
+
+const temporalPointerGridAssetLayoutSchema = z.object({
+  kind: z.literal(TEMPORAL_POINTER_GRID_LAYOUT),
+  center: z.string().url(),
+  cells: z.array(z.object({
+    direction: z.enum(TEMPORAL_POINTER_GRID_SLOTS),
+    url: z.string().url()
+  })).length(TEMPORAL_POINTER_GRID_SLOTS.length)
 })
 
 export const challengePayloadSchema = z.object({
@@ -123,7 +172,8 @@ export const challengePayloadSchema = z.object({
   draftedByOpencha: z.boolean(),
   asset: z.object({
     url: z.string().url(),
-    assetRef: z.string().min(1)
+    assetRef: z.string().min(1),
+    layout: temporalPointerGridAssetLayoutSchema.optional()
   }).nullable(),
   exceeded: z.boolean()
 }).superRefine((payload, context) => {

@@ -20,8 +20,6 @@ A verifying PR starts with a visual challenge. If the author runs out of attempt
   <tr>
     <td width="50%" valign="top">
       <strong>Challenge</strong><br>
-      OpenCHA renders a 3x3 grid challenge with a larger center pointer GIF and eight surrounding noisy code GIFs.
-      <br>
       <img src="docs/challenge.png" alt="OpenCHA visual challenge comment with a 3x3 grid" width="100%">
     </td>
     <td width="50%" valign="top">
